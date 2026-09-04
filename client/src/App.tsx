@@ -33,6 +33,9 @@ function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileMessage, setProfileMessage] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceName, setWorkspaceName] = useState("");
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
@@ -81,6 +84,8 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, token]);
 
+  useEffect(() => { if (user) setProfileName(user.name); }, [user]);
+
   const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setAuthError(""); setAuthSubmitting(true);
     try {
@@ -96,6 +101,15 @@ function App() {
 
   const logout = () => {
     leaveRoom(); localStorage.removeItem("bifrost_token"); setToken(""); setUser(null); setAuthReady(true); setWorkspaces([]);
+  };
+
+  const updateProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setProfileMessage("");
+    try {
+      const response = await fetch(`${API_URL}/auth/me`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ name: profileName }) });
+      const body = await response.json(); if (!response.ok) throw new Error(body.message);
+      setUser(body.user as User); memberNameRef.current = body.user.name; setProfileMessage("Đã cập nhật hồ sơ.");
+    } catch (error) { setProfileMessage(error instanceof Error ? error.message : "Không thể cập nhật hồ sơ."); }
   };
 
   const createWorkspace = async (event: FormEvent<HTMLFormElement>) => {
@@ -176,7 +190,8 @@ function App() {
   if (!user) return <main className="auth-page"><section className="auth-card"><span className="brand-mark">⌁</span><p className="eyebrow">BIFROST</p><h1>Không gian cộng tác trực tiếp.</h1><p className="auth-copy">Đăng nhập để vào P2P room và workspace của bạn.</p><form onSubmit={submitAuth}>{authMode === "register" && <input required placeholder="Tên hiển thị" value={authName} onChange={(event) => setAuthName(event.target.value)} />}<input required type="email" placeholder="Email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} /><input required minLength={8} type="password" placeholder="Mật khẩu (ít nhất 8 ký tự)" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} />{authError && <p className="form-error">{authError}</p>}<button disabled={authSubmitting}>{authSubmitting ? "Đang xử lý…" : authMode === "login" ? "Đăng nhập" : "Tạo tài khoản"}</button></form><button className="text-button" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthError(""); }}>{authMode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}</button></section></main>;
 
   return <main className="p2p-page">
-    <header className="p2p-header"><div><span className="brand-mark">⌁</span><strong>BIFROST</strong></div><div className="account-menu"><span>{user.name}</span><button className="text-button" onClick={logout}>Đăng xuất</button></div></header>
+    <header className="p2p-header"><div><span className="brand-mark">⌁</span><strong>BIFROST</strong></div><div className="account-menu"><span>{user.name}</span><button className="text-button" onClick={() => setShowProfile(!showProfile)}>Hồ sơ</button><button className="text-button" onClick={logout}>Đăng xuất</button></div></header>
+    {showProfile && <section className="profile-bar"><form onSubmit={updateProfile}><label htmlFor="profile-name">Tên hiển thị</label><input id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} /><button>Lưu hồ sơ</button></form>{profileMessage && <p>{profileMessage}</p>}</section>}
     <section className="workspace-bar"><div><p className="eyebrow">WORKSPACE</p><form onSubmit={createWorkspace}><input placeholder="Tên workspace mới" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} /><button>Tạo workspace</button></form></div><div><select value={selectedWorkspaceId} onChange={(event) => setSelectedWorkspaceId(event.target.value)}><option value="">Chọn workspace</option>{workspaces.map((workspace) => <option value={workspace.id} key={workspace.id}>{workspace.name} · {workspace.role}</option>)}</select>{selectedWorkspace?.role === "OWNER" && <form onSubmit={inviteMember} className="invite-form"><input required type="email" placeholder="Email thành viên" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} /><button>Mời</button></form>}</div>{workspaceMessage && <p className="workspace-message">{workspaceMessage}</p>}</section>
     <section className="p2p-card"><div className="room-heading"><div><p className="eyebrow">P2P ROOM</p><h1>Trao đổi trực tiếp giữa các peer.</h1></div><span className={joinedRoom ? "status online" : "status"}>{status}</span></div>
       {!joinedRoom ? <form className="join-form" onSubmit={joinRoom}><label htmlFor="room">Mã room</label><div><input id="room" value={roomId} onChange={(event) => setRoomId(event.target.value)} /><button>Vào room</button></div></form> : <div className="room-meta"><span>Room: <b>{joinedRoom}</b></span><span>{peersCount} peer đang kết nối</span><button className="quiet-button" onClick={leaveRoom}>Rời room</button></div>}
