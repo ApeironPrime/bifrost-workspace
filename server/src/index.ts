@@ -3,7 +3,10 @@ import dotenv from "dotenv";
 import express from "express";
 import { createServer } from "node:http";
 import { Server, type Socket } from "socket.io";
-import { z } from "zod";
+import { ZodError, z } from "zod";
+import { verifyAccessToken } from "./lib/auth.js";
+import { authRouter } from "./routes/auth.js";
+import { workspaceRouter } from "./routes/workspaces.js";
 
 dotenv.config();
 
@@ -23,8 +26,35 @@ app.get("/api/health", (_request, response) => {
   });
 });
 
+app.use("/api/auth", authRouter);
+app.use("/api/workspaces", workspaceRouter);
+
+app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+  if (error instanceof ZodError) {
+    response.status(400).json({ message: error.issues[0]?.message ?? "Dữ liệu không hợp lệ." });
+    return;
+  }
+  console.error(error);
+  response.status(500).json({ message: "Đã xảy ra lỗi máy chủ." });
+});
+
 const io = new Server(httpServer, {
   cors: { origin: clientUrl },
+});
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (typeof token !== "string") {
+    next(new Error("Bạn cần đăng nhập trước khi kết nối realtime."));
+    return;
+  }
+
+  try {
+    socket.data.user = verifyAccessToken(token);
+    next();
+  } catch {
+    next(new Error("Phiên đăng nhập không hợp lệ."));
+  }
 });
 
 const roomIdSchema = z.string().trim().min(3).max(80);
@@ -95,7 +125,7 @@ io.on("connection", (socket) => {
   relaySignal("webrtc:answer");
   relaySignal("webrtc:ice-candidate");
 
-  socket.on("disconnect", () => {
+  socket.on("disconnecting", () => {
     [...socket.rooms]
       .filter((roomId) => roomId !== socket.id)
       .forEach((roomId) => socket.to(roomId).emit("room:peer-left", { peerId: socket.id }));
