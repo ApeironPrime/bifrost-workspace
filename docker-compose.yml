@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bifrost
+      POSTGRES_PASSWORD: bifrost_dev_password
+      POSTGRES_DB: bifrost_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bifrost -d bifrost_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5433:5432"
+    volumes:
+      - bifrost_postgres_data:/var/lib/postgresql/data
+
+  server:
+    build: ./server
+    command: sh -c "npx prisma migrate deploy && npm start"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      CLIENT_URL: http://localhost:5173
+      JWT_SECRET: docker_development_only_change_before_production
+      DATABASE_URL: postgresql://bifrost:bifrost_dev_password@postgres:5432/bifrost_db?schema=public
+    ports:
+      - "3000:3000"
+
+  client:
+    build: ./client
+    depends_on:
+      - server
+    ports:
+      - "5173:80"
+
+volumes:
+  bifrost_postgres_data:

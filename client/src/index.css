@@ -1,0 +1,10 @@
+:root {
+  color: #2c302d;
+  font-family: Inter, "Noto Sans JP", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; }
