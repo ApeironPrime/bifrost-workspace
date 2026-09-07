@@ -19,3 +19,25 @@ button { background: #526555; border: 0; border-radius: 9px; color: #fff; cursor
 .p2p-grid { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }.chat-panel, .note-panel { background: #f5f2eb; border: 1px solid #e0d9ce; border-radius: 12px; padding: 18px; }.messages { display: flex; flex-direction: column; gap: 10px; min-height: 250px; }.empty { align-self: center; color: #83877f; font-size: 14px; margin: auto; text-align: center; }.empty.small { min-height: 42px; }.message { background: #fffdf9; border-radius: 10px 10px 10px 2px; max-width: 70%; padding: 9px 12px; }.message.mine { align-self: flex-end; background: #dce8dc; border-radius: 10px 10px 2px 10px; }.message small, .shared-note small { color: #627064; font-weight: 700; }.message p, .shared-note p { margin: 4px 0 0; }.message-form { border-top: 1px solid #e0d9ce; margin-top: 16px; padding-top: 16px; }
 .note-heading { align-items: start; display: flex; gap: 10px; justify-content: space-between; }.note-heading h2 { color: #2c302d; font-size: 20px; margin: 0; }.share-button { background: #74796f; font-size: 12px; padding: 9px 11px; }.share-button.active { background: #a55548; }.note-panel textarea { background: #fffdf9; border: 1px solid #cdc5b9; border-radius: 9px; color: #2c302d; font: inherit; height: 132px; margin-top: 16px; padding: 12px; resize: vertical; width: 100%; }.note-status { color: #687066; font-size: 13px; margin: 8px 0 18px; }.received-notes { border-top: 1px solid #e0d9ce; padding-top: 15px; }.shared-note { background: #e2ece1; border-radius: 9px; margin-top: 8px; padding: 10px 12px; }
 @media (max-width: 650px) { .p2p-page { padding: 16px; }.p2p-header { align-items: start; flex-direction: column; gap: 8px; margin-bottom: 20px; }.p2p-card { padding: 26px 20px; }.room-heading, .p2p-grid, .workspace-bar, .profile-bar, .profile-bar form { display: flex; flex-direction: column; }.room-meta { align-items: start; flex-direction: column; gap: 8px; }.quiet-button { margin-left: 0; } }
+
+.rooms-section { display: flex; flex-direction: column; gap: 24px; margin-top: 24px; }
+.create-room-box { background: #f5f2eb; border: 1px solid #e0d9ce; border-radius: 14px; padding: 20px; }
+.create-room-form { display: flex; gap: 10px; margin-top: 8px; }
+.create-room-form input { font-size: 13px; padding: 10px 12px; }
+.create-room-form button { font-size: 13px; padding: 10px 16px; white-space: nowrap; }
+.room-message { color: #526555; font-size: 13px; margin: 10px 0 0; }
+.rooms-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-top: 10px; }
+.room-card { background: #fffdf9; border: 1px solid #cdc5b9; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; padding: 18px; }
+.room-card:hover { border-color: #526555; box-shadow: 0 4px 16px rgba(44, 48, 45, .06); }
+.room-card-info h3 { color: #2c302d; font-size: 17px; margin: 0 0 6px; }
+.room-card-desc { color: #62675f; font-size: 13px; margin: 0 0 10px; }
+.room-card-meta { color: #83877f; display: block; font-size: 12px; margin-bottom: 14px; }
+.join-room-btn { align-self: flex-start; font-size: 12px; padding: 8px 16px; }
+.room-description-text { color: #6d706b; font-size: 14px; margin: 4px 0 0; }
+.presence-bar { align-items: center; border-bottom: 1px solid #e4ded4; color: #62675f; display: flex; flex-wrap: wrap; font-size: 13px; gap: 12px; margin: 24px 0 20px; padding-bottom: 16px; }
+.presence-members { display: flex; flex-wrap: wrap; gap: 8px; }
+.presence-badge { align-items: center; background: #eee8dd; border-radius: 999px; color: #4a5048; display: inline-flex; font-size: 12px; font-weight: 500; gap: 6px; padding: 4px 10px; }
+.presence-badge.mine { background: #dce8dc; color: #2e5436; font-weight: 700; }
+.presence-dot { background: #4bb543; border-radius: 50%; display: inline-block; height: 7px; width: 7px; }
+.room-error-alert { background: #fbeae8; border: 1px solid #e6b8b2; border-radius: 8px; color: #a55548; font-size: 13px; margin: 16px 0; padding: 10px 14px; }
+

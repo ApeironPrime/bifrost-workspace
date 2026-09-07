@@ -124,3 +124,90 @@ workspaceRouter.delete("/:workspaceId/members/:userId", async (request, response
     next(error);
   }
 });
+
+const createRoomSchema = z.object({
+  name: z.string().trim().min(2, "Tên phòng cần ít nhất 2 ký tự.").max(120, "Tên phòng tối đa 120 ký tự."),
+  description: z.string().trim().max(255, "Mô tả tối đa 255 ký tự.").optional().nullable(),
+});
+const workspaceIdSchema = z.string().uuid("ID workspace không hợp lệ.");
+
+workspaceRouter.get("/:workspaceId/rooms", async (request, response, next) => {
+  try {
+    const parsedWorkspaceId = workspaceIdSchema.safeParse(request.params.workspaceId);
+    if (!parsedWorkspaceId.success) {
+      response.status(400).json({ message: "ID workspace không hợp lệ." });
+      return;
+    }
+    const workspaceId = parsedWorkspaceId.data;
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    });
+    if (!workspace) {
+      response.status(404).json({ message: "Không tìm thấy workspace." });
+      return;
+    }
+
+    const membership = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: request.user!.id } },
+    });
+    if (!membership) {
+      response.status(403).json({ message: "Bạn không thuộc workspace này." });
+      return;
+    }
+
+    const rooms = await prisma.room.findMany({
+      where: { workspaceId },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    response.json({ rooms });
+  } catch (error) {
+    next(error);
+  }
+});
+
+workspaceRouter.post("/:workspaceId/rooms", async (request, response, next) => {
+  try {
+    const parsedWorkspaceId = workspaceIdSchema.safeParse(request.params.workspaceId);
+    if (!parsedWorkspaceId.success) {
+      response.status(400).json({ message: "ID workspace không hợp lệ." });
+      return;
+    }
+    const workspaceId = parsedWorkspaceId.data;
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    });
+    if (!workspace) {
+      response.status(404).json({ message: "Không tìm thấy workspace." });
+      return;
+    }
+
+    const isOwner = await ownerMembership(workspaceId, request.user!.id);
+    if (!isOwner) {
+      response.status(403).json({ message: "Chỉ Workspace Owner mới có thể tạo room." });
+      return;
+    }
+
+    const input = createRoomSchema.parse(request.body);
+    const room = await prisma.room.create({
+      data: {
+        name: input.name,
+        description: input.description?.trim() ? input.description.trim() : null,
+        workspaceId,
+        hostId: request.user!.id,
+      },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    response.status(201).json({ room });
+  } catch (error) {
+    next(error);
+  }
+});

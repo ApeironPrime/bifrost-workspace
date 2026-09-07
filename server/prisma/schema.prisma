@@ -21,6 +21,7 @@ model User {
   updatedAt            DateTime          @updatedAt @map("updated_at")
   ownedWorkspaces      Workspace[]       @relation("WorkspaceOwner")
   workspaceMemberships WorkspaceMember[]
+  hostedRooms          Room[]            @relation("HostedRooms")
 
   @@map("users")
 }
@@ -34,6 +35,7 @@ model Workspace {
   updatedAt DateTime          @updatedAt @map("updated_at")
   owner     User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members   WorkspaceMember[]
+  rooms     Room[]
 
   @@map("workspaces")
 }
@@ -50,3 +52,20 @@ model WorkspaceMember {
   @@index([userId])
   @@map("workspace_members")
 }
+
+model Room {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @db.VarChar(120)
+  description String?   @db.VarChar(255)
+  workspaceId String    @map("workspace_id") @db.Uuid
+  hostId      String    @map("host_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  host        User      @relation("HostedRooms", fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([hostId])
+  @@map("rooms")
+}
+
