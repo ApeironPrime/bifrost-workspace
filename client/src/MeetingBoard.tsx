@@ -1012,7 +1012,7 @@ export const MeetingBoard = memo(function MeetingBoard({
         aria-label={t('meetingBoard.label')}
         tabIndex={0}
       >
-        {COLUMNS.map((col) => {
+        {COLUMNS.map((col, colIndex) => {
           const colItems = itemsByColumn[col.kind];
           const Icon = col.icon;
 
@@ -1026,6 +1026,9 @@ export const MeetingBoard = memo(function MeetingBoard({
               {/* Column Header */}
               <div className="column-header">
                 <div className="column-title-group">
+                  <span className="column-monograph-index" aria-hidden="true">
+                    0{colIndex + 1}
+                  </span>
                   <div className={`column-icon-box col-icon-${col.kind}`}>
                     <Icon size={15} />
                   </div>

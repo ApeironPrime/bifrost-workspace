@@ -3015,8 +3015,16 @@ function App() {
               {roomReadOnly && <p className="room-readonly-notice" role="status">{t('room.readOnlyModeBanner')}</p>}
               <div className="room-session-heading">
                 <div className="room-session-title-group">
-                  <span className="workspace-section-index">{t('room.eyebrow')}</span>
+                  <div className="room-editorial-kicker">
+                    <span className="workspace-section-index">{t('room.eyebrow')}</span>
+                    <span className="room-kicker-divider" aria-hidden="true">·</span>
+                    <span className="room-kicker-coord" aria-hidden="true">B / 001</span>
+                    <span className="room-kicker-motif" lang="ja" aria-hidden="true">折り目の向こうで、出会う。</span>
+                  </div>
                   <h1>{currentRoom.name}</h1>
+                  {currentRoom.description && (
+                    <p className="room-session-subtitle">{currentRoom.description}</p>
+                  )}
                 </div>
                 <div className="room-session-meta">
                   <span className={`p2p-status-pill room-mobile-status tone-${statusDisplay.tone}`}>

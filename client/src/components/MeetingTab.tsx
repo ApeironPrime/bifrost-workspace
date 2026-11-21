@@ -28,43 +28,85 @@ export const MeetingTab = memo(function MeetingTab({ currentUserId, currentUserN
   const remotePeers = onlinePeers.filter(peer => peer.userId !== currentUserId)
   return (
     <section className={`meeting-container ${remotePeers.length === 0 ? 'meeting-solo' : ''}`} aria-label={t('meeting.title')}>
-      <p className="meeting-notice-banner" id="meeting-device-notice">
-        <Info size={16} aria-hidden="true" /><span>{mediaNotice}</span>
-      </p>
+      <div className="meeting-chamber-masthead">
+        <span className="chamber-masthead-coord" aria-hidden="true">
+          <span>01 /</span>
+          <span>WebRTC · P2P</span>
+        </span>
+        <p className="meeting-notice-banner" id="meeting-device-notice">
+          <Info size={14} aria-hidden="true" /><span>{mediaNotice}</span>
+        </p>
+        <span className="chamber-masthead-motif" lang="ja" aria-hidden="true">静かな対話の場</span>
+      </div>
       <div className="meeting-stage-layout">
+        <svg className="meeting-stage-thread" viewBox="0 0 800 540" fill="none" aria-hidden="true">
+          <path d="M90 150 C90 40 690 25 695 230 S710 470 490 475 S65 520 105 380" />
+          <path className="meeting-thread-signal" d="M90 150 C90 40 690 25 695 230 S710 470 490 475 S65 520 105 380" />
+        </svg>
+        <div className="meeting-chamber-coordinate" aria-hidden="true">
+          <span>B / 001</span>
+          <span lang="ja">折り目の向こう</span>
+        </div>
         <div className={`meeting-grid count-${Math.min(1 + remotePeers.length, 6)}`}>
           <div className="video-tile local-tile">
             <svg className="tile-bridge-art" viewBox="0 0 300 180" fill="none" aria-hidden="true">
               <path d="M-20 175C70 175 50 20 150 20s80 155 170 155" />
               <path d="M-20 185C70 185 50 30 150 30s80 155 170 155" />
             </svg>
-            <span className="tile-coordinate-stamp" aria-hidden="true">B / 001</span>
-            <span className="tile-device-state"><VideoOff size={12} aria-hidden="true" />{previewBadge}</span>
-            <UserAvatar name={currentUserName} src={currentUserAvatar} size={80} seed={currentUserId} className="participant-avatar" />
+            <div className="tile-atelier-head">
+              <span className="tile-index-code" aria-hidden="true">
+                <span>01 /</span>
+                <span>B / 001</span>
+              </span>
+              <span className="tile-device-state"><VideoOff size={12} aria-hidden="true" />{previewBadge}</span>
+            </div>
+            <div className="tile-portrait-arch">
+              <div className="tile-portrait-ring">
+                <UserAvatar name={currentUserName} src={currentUserAvatar} size={80} seed={currentUserId} className="participant-avatar" />
+              </div>
+            </div>
             <div className="tile-ambient-wave" aria-hidden="true">
               {AMBIENT_WAVE_HEIGHTS.map((height, index) => (
                 <i key={index} style={{ height }} />
               ))}
             </div>
             <div className="participant-tag">
-              <MicOff size={14} aria-hidden="true" />
-              <span className="tag-name">{currentUserName} ({t('meeting.you')})</span>
+              <span className="participant-tag-identity">
+                <MicOff size={13} aria-hidden="true" />
+                <span className="tag-name">{currentUserName} ({t('meeting.you')})</span>
+              </span>
+              <span className="tag-protocol" aria-hidden="true">WebRTC · P2P</span>
             </div>
           </div>
-          {remotePeers.map(peer => (
+          {remotePeers.map((peer, index) => (
             <div className="video-tile remote-tile" key={peer.peerId}>
               <svg className="tile-bridge-art" viewBox="0 0 300 180" fill="none" aria-hidden="true">
                 <path d="M-20 175C70 175 50 20 150 20s80 155 170 155" />
                 <path d="M-20 185C70 185 50 30 150 30s80 155 170 155" />
               </svg>
-              <span className="tile-device-state">{previewBadge}</span>
-              <UserAvatar name={peer.name} size={80} seed={peer.userId} className="participant-avatar" />
+              <div className="tile-atelier-head">
+                <span className="tile-index-code" aria-hidden="true">
+                  <span>{`${String(index + 2).padStart(2, '0')} /`}</span>
+                  <span>WebRTC · P2P</span>
+                </span>
+                <span className="tile-device-state">{previewBadge}</span>
+              </div>
+              <div className="tile-portrait-arch">
+                <div className="tile-portrait-ring">
+                  <UserAvatar name={peer.name} size={80} seed={peer.userId} className="participant-avatar" />
+                </div>
+              </div>
               <div className="tile-ambient-wave" aria-hidden="true">
-                {AMBIENT_WAVE_HEIGHTS.map((height, index) => (
-                  <i key={index} style={{ height }} />
+                {AMBIENT_WAVE_HEIGHTS.map((height, barIndex) => (
+                  <i key={barIndex} style={{ height }} />
                 ))}
               </div>
-              <div className="participant-tag"><span className="tag-name">{peer.name}</span></div>
+              <div className="participant-tag">
+                <span className="participant-tag-identity">
+                  <span className="tag-name">{peer.name}</span>
+                </span>
+                <span className="tag-protocol" aria-hidden="true">WebRTC · P2P</span>
+              </div>
             </div>
           ))}
         </div>
@@ -75,10 +117,14 @@ export const MeetingTab = memo(function MeetingTab({ currentUserId, currentUserN
               <path d="M-20 185C70 185 50 30 150 30s80 155 170 155" />
             </svg>
             <div className="waiting-card-head">
-              <Users size={20} aria-hidden="true" />
-              <span>WebRTC · P2P</span>
+              <span className="waiting-card-head-code">
+                <span>02 /</span>
+                <span>WebRTC · P2P</span>
+              </span>
+              <Users size={16} aria-hidden="true" />
             </div>
             <div className="waiting-card-body">
+              <small className="waiting-card-kicker" lang="ja" aria-hidden="true">対話の準備 · B / 001</small>
               <h3>{t('meeting.waitingTitle')}</h3>
               <p>{t('meeting.waitingSubtitle')}</p>
               <div className="meeting-waiting-actions">
@@ -93,7 +139,10 @@ export const MeetingTab = memo(function MeetingTab({ currentUserId, currentUserN
             </div>
             <div className="waiting-card-colophon" aria-hidden="true">
               <span>WebRTC · P2P</span>
-              <span>B / 001</span>
+              <span className="waiting-card-colophon-coord">
+                <span>B / 001</span>
+                <span>↗</span>
+              </span>
             </div>
           </div>
         )}
