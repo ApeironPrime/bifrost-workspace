@@ -108,6 +108,46 @@ export function createWorkspaceRouter(
     }
   });
 
+  router.patch("/:workspaceId", validateUuidParams(WORKSPACE_ID_RULE), async (request, response, next) => {
+    try {
+      const { workspaceId } = request.params;
+      if (!(await ownerMembership(workspaceId, request.user!.id, db))) {
+        response.status(403).json({ message: "Chỉ Workspace Owner mới có thể chỉnh sửa workspace." });
+        return;
+      }
+      const input = workspaceSchema.parse(request.body);
+      const workspace = await db.workspace.update({
+        where: { id: workspaceId },
+        data: { name: input.name },
+      });
+      response.json({ workspace: { ...workspace, role: WorkspaceRole.OWNER } });
+    } catch (error) {
+      if (isPrismaRecordNotFoundError(error)) {
+        response.status(404).json({ message: "Không tìm thấy workspace." });
+        return;
+      }
+      next(error);
+    }
+  });
+
+  router.delete("/:workspaceId", validateUuidParams(WORKSPACE_ID_RULE), async (request, response, next) => {
+    try {
+      const { workspaceId } = request.params;
+      if (!(await ownerMembership(workspaceId, request.user!.id, db))) {
+        response.status(403).json({ message: "Chỉ Workspace Owner mới có thể xóa workspace." });
+        return;
+      }
+      await db.workspace.delete({ where: { id: workspaceId } });
+      response.status(204).send();
+    } catch (error) {
+      if (isPrismaRecordNotFoundError(error)) {
+        response.status(404).json({ message: "Không tìm thấy workspace." });
+        return;
+      }
+      next(error);
+    }
+  });
+
   router.get("/:workspaceId/members", validateUuidParams(WORKSPACE_ID_RULE), async (request, response, next) => {
     try {
       const { workspaceId } = request.params;

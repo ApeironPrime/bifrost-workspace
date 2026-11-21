@@ -289,7 +289,7 @@ function App() {
   const [authError, setAuthError] = useState("");
   const [authSubmitting, setAuthSubmitting] = useState(false);
 
-  const [discardForm,setDiscardForm] = useState<'profile'|'workspace'|'room'|'editRoom'|'invite'|null>(null);
+  const [discardForm,setDiscardForm] = useState<'profile'|'workspace'|'editWorkspace'|'room'|'editRoom'|'invite'|null>(null);
   // Profile states
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -309,6 +309,12 @@ function App() {
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [membersVersion, setMembersVersion] = useState(0);
   const [showCreateWsModal, setShowCreateWsModal] = useState(false);
+  const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
+  const [editWorkspaceName, setEditWorkspaceName] = useState("");
+  const [editWorkspaceError, setEditWorkspaceError] = useState("");
+  const [editWorkspaceSubmitting, setEditWorkspaceSubmitting] = useState(false);
+  const [confirmDeleteWorkspace, setConfirmDeleteWorkspace] = useState(false);
+  const [roomOnlineCounts, setRoomOnlineCounts] = useState<Record<string, number>>({});
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRoomMembersModal, setShowRoomMembersModal] = useState(false);
 
@@ -644,7 +650,11 @@ function App() {
         if (!response.ok || signal?.aborted) return;
         const body = (await response.json()) as {
           source?: string;
-          members?: WorkspaceMemberAccessRecord[];
+          members?: Array<
+            WorkspaceMemberAccessRecord & {
+              presence?: { status?: string; currentRoomId?: string | null };
+            }
+          >;
         };
         if (signal?.aborted || !Array.isArray(body.members)) return;
         if (selectedWorkspaceIdRef.current !== workspaceId && activeRoomRef.current?.workspaceId !== workspaceId) {
@@ -655,6 +665,13 @@ function App() {
           source: body.source,
           members: body.members,
         };
+        const counts: Record<string, number> = {};
+        for (const member of body.members) {
+          if (member.presence?.status === 'online' && member.presence.currentRoomId) {
+            counts[member.presence.currentRoomId] = (counts[member.presence.currentRoomId] ?? 0) + 1;
+          }
+        }
+        setRoomOnlineCounts(counts);
       } catch {
         // Transient roster refresh failures keep the latest valid snapshot.
       }
@@ -668,7 +685,11 @@ function App() {
       return;
     }
     const controller = new AbortController();
-    void refreshWorkspaceMemberRoster(selectedWorkspaceId, controller.signal);
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) {
+        void refreshWorkspaceMemberRoster(selectedWorkspaceId, controller.signal);
+      }
+    });
     return () => controller.abort();
   }, [userId, workspaceLoading, selectedWorkspaceId, token, membersVersion, roomsVersion, refreshWorkspaceMemberRoster]);
 
@@ -789,6 +810,97 @@ function App() {
       addToast(errText, "error");
     } finally {
       setWorkspaceSubmitting(false);
+    }
+  };
+
+  const restoreWorkspaceManageFocus = useCallback(() => {
+    requestAnimationFrame(() => {
+      const btn = document.querySelector<HTMLButtonElement>('[data-workspace-manage]');
+      if (btn && !btn.closest('[inert]')) {
+        btn.focus({ preventScroll: true });
+      }
+    });
+  }, []);
+
+  const openEditWorkspaceModal = useCallback((workspace: Workspace) => {
+    setEditingWorkspace(workspace);
+    setEditWorkspaceName(workspace.name);
+    setEditWorkspaceError("");
+    setConfirmDeleteWorkspace(false);
+  }, []);
+
+  const submitEditWorkspace = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingWorkspace || editWorkspaceSubmitting) return;
+    const trimmed = editWorkspaceName.trim();
+    if (trimmed.length < 3 || trimmed.length > 120) {
+      const err = t("workspace.nameLengthError");
+      setEditWorkspaceError(err);
+      addToast(err, "error");
+      return;
+    }
+    setEditWorkspaceError("");
+    setEditWorkspaceSubmitting(true);
+    try {
+      const response = await fetchAppApi(apiUrl(`/workspaces/${editingWorkspace.id}`), {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("workspace.updateFailed"));
+      const updated = body.workspace as Workspace;
+      setWorkspaces((current) =>
+        current.map((ws) => (ws.id === updated.id ? { ...ws, ...updated } : ws)),
+      );
+      setEditingWorkspace(null);
+      addToast(t("workspace.updatedToast", { name: updated.name }), "success");
+      restoreWorkspaceManageFocus();
+    } catch (error) {
+      const rawText = error instanceof Error ? error.message : t("workspace.updateFailed");
+      const errText = formatWorkspaceError(rawText, lang);
+      setEditWorkspaceError(errText);
+      addToast(errText, "error");
+    } finally {
+      setEditWorkspaceSubmitting(false);
+    }
+  };
+
+  const executeDeleteWorkspace = async () => {
+    if (!editingWorkspace || editWorkspaceSubmitting) return;
+    const target = editingWorkspace;
+    setEditWorkspaceError("");
+    setEditWorkspaceSubmitting(true);
+    try {
+      const response = await fetchAppApi(apiUrl(`/workspaces/${target.id}`), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = response.status === 204 ? {} : await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error((body as { message?: string }).message || t("workspace.deleteFailed"));
+      if (activeRoomRef.current?.workspaceId === target.id) {
+        leaveRoom(false);
+      }
+      const nextWorkspaces = workspacesRef.current.filter((ws) => ws.id !== target.id);
+      setWorkspaces(nextWorkspaces);
+      workspaceMemberRosterRef.current = null;
+      setRoomOnlineCounts({});
+      const nextId = selectedWorkspaceIdRef.current === target.id ? (nextWorkspaces[0]?.id ?? "") : selectedWorkspaceIdRef.current;
+      setSelectedWorkspaceId(nextId);
+      setRooms([]);
+      setRoomsLoadedFor("");
+      setRoomLoadError("");
+      changeRoute({ workspaceId: nextId, roomId: "", tab: "meeting" }, true);
+      setConfirmDeleteWorkspace(false);
+      setEditingWorkspace(null);
+      addToast(t("workspace.deletedToast", { name: target.name }), "success");
+    } catch (error) {
+      const errText = error instanceof Error ? error.message : t("workspace.deleteFailed");
+      setEditWorkspaceError(errText);
+      setConfirmDeleteWorkspace(false);
+      addToast(errText, "error");
+    } finally {
+      setEditWorkspaceSubmitting(false);
     }
   };
 
@@ -1353,6 +1465,8 @@ function App() {
     setRoomsLoadedFor("");
     setShowProfileModal(false); setShowCreateRoomModal(false); setShowCreateWsModal(false); setShowInviteModal(false); setShowRoomMembersModal(false);
     setEditingRoom(null); setConfirmDeleteRoom(false);
+    setEditingWorkspace(null); setConfirmDeleteWorkspace(false);
+    setRoomOnlineCounts({});
     setProfileName(''); setProfileAvatar(null); setProfileMessage('');
     setRoomMessage(''); setRoomLoadError(''); setInviteError(''); setWorkspaceError('');
     setDiscardForm(null);setAuthEmail(''); setAuthName(''); setAuthPassword(''); setAuthError(''); setAuthMode('login');
@@ -1673,6 +1787,7 @@ function App() {
     // Reset the old workspace's rows in the same render as its name changes.
     if (workspaceId !== selectedWorkspaceId) {
       workspaceMemberRosterRef.current = null;
+      setRoomOnlineCounts({});
       setRooms([]); setRoomsLoading(true); setRoomsLoadedFor(''); setRoomLoadError('');
     }
     if (activeRoomRef.current && activeRoomRef.current.workspaceId !== workspaceId) {
@@ -1893,6 +2008,14 @@ function App() {
     else setShowProfileModal(false);
   };
   const closeWorkspaceForm = () => { if(workspaceSubmitting) return;if(workspaceName.trim()) setDiscardForm('workspace');else setShowCreateWsModal(false); };
+  const closeEditWorkspaceForm = () => {
+    if (editWorkspaceSubmitting || !editingWorkspace) return;
+    if (editWorkspaceName.trim() !== editingWorkspace.name) setDiscardForm('editWorkspace');
+    else {
+      setEditingWorkspace(null);
+      restoreWorkspaceManageFocus();
+    }
+  };
   const closeRoomForm = () => { if(roomSubmitting) return;if(newRoomName.trim() || newRoomDesc.trim()) setDiscardForm('room');else setShowCreateRoomModal(false); };
   const closeEditRoomForm = () => {
     if (editRoomSubmitting || !editingRoom) return;
@@ -1906,10 +2029,11 @@ function App() {
     }
   };
   const closeInviteForm = () => { if(inviteSubmitting) return;if(inviteEmail.trim()) setDiscardForm('invite');else setShowInviteModal(false); };
-  const activeDialog = discardForm ? '' : showProfileModal ? 'profile' : showCreateWsModal ? 'workspace' : showCreateRoomModal ? 'room' : (editingRoom && !confirmDeleteRoom) ? 'editRoom' : showInviteModal ? 'invite' : showRoomMembersModal ? 'roomMembers' : '';
+  const activeDialog = discardForm ? '' : showProfileModal ? 'profile' : showCreateWsModal ? 'workspace' : (editingWorkspace && !confirmDeleteWorkspace) ? 'editWorkspace' : showCreateRoomModal ? 'room' : (editingRoom && !confirmDeleteRoom) ? 'editRoom' : showInviteModal ? 'invite' : showRoomMembersModal ? 'roomMembers' : '';
   useDialogFocus(activeDialog, () => {
     if (activeDialog === 'profile') closeProfileForm();
     if (activeDialog === 'workspace') closeWorkspaceForm();
+    if (activeDialog === 'editWorkspace') closeEditWorkspaceForm();
     if (activeDialog === 'room') closeRoomForm();
     if (activeDialog === 'editRoom') closeEditRoomForm();
     if (activeDialog === 'invite') closeInviteForm();
@@ -2131,17 +2255,32 @@ function App() {
         <div className="sidebar-workspace">
           <div className="sidebar-workspace-head">
             <span className="sidebar-section-title">{t("workspace.shortLabel")}</span>
-            <button
-              type="button"
-              className="sidebar-add-ws-btn"
-              disabled={workspaceLoading || workspaceSubmitting}
-              onClick={openWorkspaceForm}
-              title={t("sidebar.newWorkspace")}
-              aria-label={t("sidebar.newWorkspace")}
-            >
-              <FolderPlus size={16} aria-hidden="true" />
-              <span>{t("workspace.newShortButton")}</span>
-            </button>
+            <div className="sidebar-workspace-actions">
+              {selectedWorkspace?.role === "OWNER" && (
+                <button
+                  type="button"
+                  className="workspace-manage-btn"
+                  data-workspace-manage
+                  disabled={workspaceLoading || workspaceSubmitting}
+                  onClick={() => openEditWorkspaceModal(selectedWorkspace)}
+                  title={t("workspace.manageWorkspaceAria", { name: selectedWorkspace.name })}
+                  aria-label={t("workspace.manageWorkspaceAria", { name: selectedWorkspace.name })}
+                >
+                  <Settings2 size={14} aria-hidden="true" />
+                </button>
+              )}
+              <button
+                type="button"
+                className="sidebar-add-ws-btn"
+                disabled={workspaceLoading || workspaceSubmitting}
+                onClick={openWorkspaceForm}
+                title={t("sidebar.newWorkspace")}
+                aria-label={t("sidebar.newWorkspace")}
+              >
+                <FolderPlus size={16} aria-hidden="true" />
+                <span>{t("workspace.newShortButton")}</span>
+              </button>
+            </div>
           </div>
           <div
             className="sidebar-workspace-picker-wrap"
@@ -2278,6 +2417,11 @@ function App() {
                 rooms.map((room) => {
                   const isActive = currentRoom?.id === room.id;
                   const isUnassigned = room.access === null;
+                  const isHost = room.access === 'HOST' || (room.hostId !== null && room.hostId === user.id);
+                  const isViewer = room.access === 'VIEWER';
+                  const liveCount = isActive
+                    ? Math.max(roomOnlineCounts[room.id] ?? 0, onlinePeers.length)
+                    : (roomOnlineCounts[room.id] ?? 0);
                   const roomLabel = isUnassigned ? `${room.name} — ${unassignedRoomLabel}` : room.name;
                   return (
                     <li
@@ -2303,7 +2447,18 @@ function App() {
                         <span className="room-nav-bullet" aria-hidden="true" />
                         <span className="room-mini-name" aria-hidden="true">{roomInitials(room.name)}</span>
                         <span className="sidebar-room-label truncate">{room.name}</span>
-                        {isUnassigned && <Lock size={12} className="room-locked-icon" aria-hidden="true" />}
+                        {isUnassigned ? (
+                          <Lock size={12} className="room-locked-icon" aria-hidden="true" />
+                        ) : liveCount > 0 ? (
+                          <span className="sidebar-room-live-pill" aria-hidden="true">
+                            <span className="sidebar-room-live-dot" />
+                            <span>{liveCount}</span>
+                          </span>
+                        ) : isHost ? (
+                          <Crown size={12} className="sidebar-room-role-icon" aria-hidden="true" />
+                        ) : isViewer ? (
+                          <Eye size={12} className="sidebar-room-role-icon" aria-hidden="true" />
+                        ) : null}
                         {isActive && <span className="room-active-dot" aria-hidden="true" />}
                       </button>
                     </li>
@@ -3177,11 +3332,13 @@ function App() {
               ? t('dashboard.discardProfileTitle')
               : discardForm === 'workspace'
                 ? t('dashboard.discardWorkspaceTitle')
-                : discardForm === 'room'
-                  ? t('dashboard.discardRoomTitle')
-                  : discardForm === 'editRoom'
-                    ? t('dashboard.discardEditRoomTitle')
-                    : t('dashboard.discardInviteTitle')
+                : discardForm === 'editWorkspace'
+                  ? t('dashboard.discardEditWorkspaceTitle')
+                  : discardForm === 'room'
+                    ? t('dashboard.discardRoomTitle')
+                    : discardForm === 'editRoom'
+                      ? t('dashboard.discardEditRoomTitle')
+                      : t('dashboard.discardInviteTitle')
           }
           description={
             discardForm === 'profile'
@@ -3190,11 +3347,13 @@ function App() {
                 : t('dashboard.discardProfileNameBody')
               : discardForm === 'workspace'
                 ? t('dashboard.discardWorkspaceBody')
-                : discardForm === 'room'
-                  ? t('dashboard.discardRoomBody')
-                  : discardForm === 'editRoom'
-                    ? t('dashboard.discardEditRoomBody')
-                    : t('dashboard.discardInviteBody')
+                : discardForm === 'editWorkspace'
+                  ? t('dashboard.discardEditWorkspaceBody')
+                  : discardForm === 'room'
+                    ? t('dashboard.discardRoomBody')
+                    : discardForm === 'editRoom'
+                      ? t('dashboard.discardEditRoomBody')
+                      : t('dashboard.discardInviteBody')
           }
           cancelLabel={t('common.keepEditing')}
           confirmLabel={t('common.discard')}
@@ -3203,12 +3362,26 @@ function App() {
           onConfirm={() => {
             if (discardForm === 'profile') setShowProfileModal(false);
             if (discardForm === 'workspace') { setShowCreateWsModal(false); setWorkspaceName(''); }
+            if (discardForm === 'editWorkspace') { setEditingWorkspace(null); setEditWorkspaceError(''); restoreWorkspaceManageFocus(); }
             if (discardForm === 'room') { setShowCreateRoomModal(false); setNewRoomName(''); setNewRoomDesc(''); }
             if (discardForm === 'editRoom') { setEditingRoom(null); setEditRoomError(''); restoreManagedRoomFocus(); }
             if (discardForm === 'invite') { setShowInviteModal(false); setInviteEmail(''); }
             setDiscardForm(null);
           }}
         />
+      </MotionPresence>
+      <MotionPresence present={!!editingWorkspace && confirmDeleteWorkspace}>
+        {editingWorkspace && (
+          <ConfirmDialog
+            title={t("workspace.deleteConfirmTitle")}
+            description={t("workspace.deleteConfirmBody", { name: editingWorkspace.name })}
+            cancelLabel={t("common.cancel")}
+            confirmLabel={t("workspace.deleteConfirmAction")}
+            tone="danger"
+            onCancel={() => setConfirmDeleteWorkspace(false)}
+            onConfirm={() => void executeDeleteWorkspace()}
+          />
+        )}
       </MotionPresence>
       <MotionPresence present={!!editingRoom && confirmDeleteRoom}>
         {editingRoom && (
@@ -3469,6 +3642,102 @@ function App() {
             </form>
           </section>
         </div>
+      </MotionPresence>
+
+      {/* Edit / Delete Workspace Modal */}
+      <MotionPresence present={!!editingWorkspace && !confirmDeleteWorkspace && !discardForm}>
+        {editingWorkspace && (
+          <div className="modal-overlay" onClick={closeEditWorkspaceForm}>
+            <section
+              className="modal-card workspace-edit-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="modal-edit-workspace-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header">
+                <h3 id="modal-edit-workspace-title">{t("workspace.editBoxTitle")}</h3>
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={closeEditWorkspaceForm}
+                  disabled={editWorkspaceSubmitting}
+                  aria-label={t("common.close")}
+                  title={t("common.close")}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </div>
+              <form onSubmit={submitEditWorkspace} className="form-stack" aria-busy={editWorkspaceSubmitting || undefined}>
+                <div className="form-field">
+                  <label htmlFor="modal-edit-workspace-name" className="form-field-label">
+                    <span>{t("workspace.nameLabel")}</span>
+                    <span className="form-required-mark" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    id="modal-edit-workspace-name"
+                    autoComplete="organization"
+                    required
+                    className="input-text"
+                    placeholder={t("workspace.newNamePlaceholder")}
+                    minLength={3}
+                    maxLength={120}
+                    disabled={editWorkspaceSubmitting}
+                    value={editWorkspaceName}
+                    onChange={(event) => {
+                      setEditWorkspaceName(event.target.value);
+                      setEditWorkspaceError("");
+                    }}
+                    aria-invalid={Boolean(editWorkspaceError) || undefined}
+                    aria-describedby={editWorkspaceError ? "modal-edit-workspace-error" : "modal-edit-workspace-hint"}
+                  />
+                  <p id="modal-edit-workspace-hint" className="form-field-hint">
+                    {t("workspace.nameHint")}
+                  </p>
+                </div>
+                {editWorkspaceError && (
+                  <p id="modal-edit-workspace-error" className="form-error" role="alert">
+                    {editWorkspaceError}
+                  </p>
+                )}
+                <div className="room-danger-zone">
+                  <div className="room-danger-copy">
+                    <strong>{t("workspace.dangerZoneHeading")}</strong>
+                    <p>{t("workspace.dangerZoneDesc")}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    disabled={editWorkspaceSubmitting}
+                    onClick={() => setConfirmDeleteWorkspace(true)}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                    <span>{t("workspace.deleteWorkspaceButton")}</span>
+                  </button>
+                </div>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={closeEditWorkspaceForm}
+                    disabled={editWorkspaceSubmitting}
+                  >
+                    {t("common.close")}
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={editWorkspaceSubmitting}
+                    aria-busy={editWorkspaceSubmitting || undefined}
+                  >
+                    {editWorkspaceSubmitting && <span className="btn-spinner" aria-hidden="true" />}
+                    <span>{editWorkspaceSubmitting ? t("common.saving") : t("workspace.saveChangesButton")}</span>
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
       </MotionPresence>
 
       {/* Create Room Modal */}

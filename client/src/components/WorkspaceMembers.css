@@ -801,3 +801,43 @@
   line-height: 1.55;
   color: var(--text-muted);
 }
+
+.member-group-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.member-group-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.member-group-pill:hover {
+  border-color: var(--border-strong);
+  color: var(--text-main);
+}
+
+.member-group-pill.is-active {
+  background: var(--primary-sage);
+  border-color: var(--primary-sage);
+  color: var(--primary-text);
+}
+
+.member-group-pill small {
+  font-size: 11px;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}

@@ -29,13 +29,17 @@
 }
 
 .workspace-edition.room-focused .room-session-heading {
-  gap: 12px;
-  padding: 14px 28px 10px;
-  align-items: center;
+  gap: 14px;
+  padding: 18px 28px 12px;
+  align-items: flex-end;
 }
 
 .room-focused .room-session-heading .workspace-section-index {
-  display: none;
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: .16em;
+  color: var(--text-eyebrow);
 }
 
 .room-session-title-group {
@@ -53,8 +57,8 @@
 
 .workspace-edition.room-focused .room-session-heading h1 {
   margin: 0;
-  font-size: clamp(22px, 2vw, 30px);
-  line-height: 1.25;
+  font: 400 clamp(24px, 2.3vw, 34px)/1.12 'Newsreader', Georgia, serif;
+  letter-spacing: -.03em;
 }
 
 .room-session-meta {
@@ -122,6 +126,7 @@
   min-height: 48px;
   padding-inline: 28px;
   scrollbar-width: thin;
+  counter-reset: room-tab;
 }
 
 .workspace-edition .room-tab-btn {
@@ -133,14 +138,27 @@
   cursor: pointer;
   display: inline-flex;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
-  gap: 8px;
+  gap: 7px;
   height: 100%;
   min-height: 46px;
   padding: 0;
   letter-spacing: 0.005em;
   transition: color .25s;
+  counter-increment: room-tab;
+}
+
+.workspace-edition.room-focused .room-tab-btn::before {
+  content: "0" counter(room-tab);
+  font: italic 12px/1 'Newsreader', Georgia, serif;
+  color: var(--text-subtle);
+  margin-right: 1px;
+  transition: color .25s;
+}
+
+.workspace-edition.room-focused .room-tab-btn.active::before {
+  color: #a98a60;
 }
 
 .workspace-edition.room-focused .room-tab-btn {
@@ -237,10 +255,11 @@
 }
 
 .workspace-edition.room-focused .right-panel-header h3 {
-  font-family: inherit;
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 1.4;
+  font-family: 'Newsreader', Georgia, serif;
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 1.25;
+  letter-spacing: -.015em;
 }
 
 .workspace-edition .right-panel-body {
@@ -474,6 +493,26 @@
   grid-template-rows: 1fr 1fr;
 }
 
+.meeting-stage-layout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  width: 100%;
+}
+
+.workspace-edition.room-focused .meeting-solo .meeting-stage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  align-items: stretch;
+  align-content: center;
+  gap: clamp(20px, 3vw, 38px);
+  max-width: 1040px;
+  margin: auto 0;
+  align-self: center;
+}
+
 .workspace-edition.room-focused .meeting-grid {
   flex: initial;
   display: grid;
@@ -486,25 +525,23 @@
 }
 
 .workspace-edition .meeting-solo .meeting-grid.count-1 {
-  grid-template-columns: minmax(240px, 440px) minmax(240px, 380px);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto;
-  align-items: center;
+  align-items: stretch;
   align-content: center;
   justify-content: center;
-  gap: clamp(28px, 5vw, 72px);
+  gap: 0;
   min-height: 0;
   width: 100%;
-  max-width: 1000px;
-  align-self: center;
-  flex: 1;
+  max-width: none;
   margin: 0;
 }
 
 .workspace-edition.room-focused .meeting-solo .meeting-grid.count-1 {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  max-width: 560px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
 }
 
 .workspace-edition .video-tile {
@@ -513,13 +550,58 @@
   flex-direction: column;
   justify-content: center;
   position: relative;
+  isolation: isolate;
   transition: all 0.2s ease;
   min-height: 210px;
   overflow: hidden;
-  border: 1px solid #b6c5a522;
-  border-radius: 5px;
-  box-shadow: none;
-  background: radial-gradient(ellipse at center, #365346 0%, #19372d 80%);
+  border: 1px solid #b6c5a529;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px #102a2314;
+  background: radial-gradient(ellipse at 42% 32%, #355446 0%, #19362c 76%, #132820 100%);
+}
+
+.tile-bridge-art {
+  position: absolute;
+  inset: auto -10% -18% -10%;
+  width: 120%;
+  height: auto;
+  pointer-events: none;
+  opacity: 0.2;
+  z-index: 0;
+}
+
+.tile-bridge-art path {
+  stroke: #d7cfb8;
+  stroke-width: 1.25;
+}
+
+.tile-coordinate-stamp {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  font: italic 12px/1 'Newsreader', Georgia, serif;
+  letter-spacing: 0.14em;
+  color: #d4dece88;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tile-ambient-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  margin-top: 16px;
+  opacity: 0.45;
+  z-index: 1;
+}
+
+.tile-ambient-wave i {
+  display: block;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #e7e4d0 0%, #98ad91 100%);
 }
 
 .video-tile:focus-visible {
@@ -533,15 +615,15 @@
 }
 
 .workspace-edition .meeting-solo .local-tile {
-  height: auto;
-  min-height: 190px;
-  max-height: 280px;
-  aspect-ratio: 16 / 9;
+  height: 100%;
+  min-height: 260px;
+  max-height: 360px;
+  aspect-ratio: 16 / 10;
   width: 100%;
-  border-radius: 14px;
-  align-self: center;
+  border-radius: 18px 6px 18px 6px;
+  align-self: stretch;
   background: radial-gradient(ellipse at 45% 35%, #365749, #17372d 85%);
-  box-shadow: 0 12px 32px #1531270c;
+  box-shadow: 0 18px 40px #15312718;
 }
 
 .tile-device-state {
@@ -630,42 +712,95 @@
   max-width: 380px;
 }
 
-/* Kept after .meeting-solo so .room-focused inherits horizontal inline layout */
+/* Kept after .meeting-solo so .room-focused inherits sculpted editorial dossier card */
 .workspace-edition.room-focused .meeting-waiting-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
-  flex-direction: row;
-  gap: 16px;
-  width: min(100%, 560px);
-  margin: 0 auto;
-  padding: 18px 0;
-  min-height: 0;
-  align-items: center;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  margin: 0;
+  padding: 24px 24px 18px;
+  min-height: 260px;
+  align-items: flex-start;
   text-align: left;
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 22px 4px 4px 4px;
+  box-shadow: var(--shadow-sm);
 }
 
-.workspace-edition.room-focused .meeting-waiting-card > svg {
-  flex-shrink: 0;
-  color: var(--text-muted);
+.waiting-card-bridge {
+  position: absolute;
+  right: -12%;
+  bottom: -14%;
+  width: 72%;
+  height: auto;
+  opacity: 0.14;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.waiting-card-bridge path {
+  stroke: var(--primary-sage);
+  stroke-width: 1.2;
+}
+
+.waiting-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  color: var(--text-eyebrow);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  z-index: 1;
+}
+
+.waiting-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1;
 }
 
 .workspace-edition.room-focused .meeting-waiting-card h3 {
-  font-family: inherit;
-  font-weight: 500;
-  font-size: 19px;
-  line-height: 1.4;
+  font-family: 'Newsreader', Georgia, serif;
+  font-weight: 400;
+  font-size: 25px;
+  line-height: 1.15;
+  letter-spacing: -.02em;
   margin: 0;
   color: var(--text-main);
 }
 
 .workspace-edition.room-focused .meeting-waiting-card p {
   font-size: 13px;
-  line-height: 1.6;
-  margin: 6px 0;
+  line-height: 1.65;
+  margin: 2px 0 8px;
   color: var(--text-muted);
   max-width: 320px;
+}
+
+.waiting-card-colophon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-subtle);
+  z-index: 1;
+}
+
+.waiting-card-colophon span:last-child {
+  font-family: 'Newsreader', Georgia, serif;
+  font-style: italic;
 }
 
 .workspace-edition.room-focused .meeting-waiting-card small {
@@ -775,11 +910,11 @@
   .notes-column-header h2,
   .file-share-header h2
 ) {
-  font-family: inherit;
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: -.02em;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -.025em;
   margin: 0 0 12px;
   color: var(--text-main);
 }
@@ -969,12 +1104,12 @@
 
 .workspace-edition .board-column h3.column-title {
   color: var(--text-main);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   margin: 0;
-  font-family: inherit;
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.45;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.3;
 }
 
 .workspace-edition.room-focused .column-subtitle {
@@ -1369,14 +1504,22 @@
 .workspace-edition .board-card[data-drop-edge="after"]::after {
   content: "";
   position: absolute;
-  left: 4px;
-  right: 4px;
-  height: 3px;
+  left: 2px;
+  right: 2px;
+  height: 4px;
   border-radius: 999px;
   background: var(--primary-sage);
-  box-shadow: 0 0 0 2px var(--bg-panel);
+  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 12px rgba(62, 84, 66, 0.35);
   pointer-events: none;
   z-index: 3;
+}
+
+.workspace-edition .board-card[data-drop-edge="before"] {
+  transform: translateY(2px);
+}
+
+.workspace-edition .board-card[data-drop-edge="after"] {
+  transform: translateY(-2px);
 }
 
 .workspace-edition .board-card[data-drop-edge="before"]::before {
@@ -1407,14 +1550,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 11px 13px;
+  padding: 12px 14px;
   border-radius: 9px;
   background: var(--bg-card);
   color: var(--text-main);
   border: 1.5px solid var(--primary-sage);
-  box-shadow: 0 18px 40px #10291e30, 0 4px 12px #10291e14;
+  box-shadow: 0 22px 48px #10291e38, 0 6px 16px #10291e1a;
   font-size: 13px;
   font-weight: 600;
+  transform: rotate(-1.3deg) scale(1.02);
 }
 
 .board-drag-preview-card svg {
@@ -1823,9 +1967,10 @@
   min-height: 220px;
   resize: vertical;
   border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--primary-sage);
   border-radius: 6px;
-  padding: 16px;
-  background: var(--bg-page);
+  padding: 18px 18px 18px 20px;
+  background: var(--bg-card);
 }
 
 .workspace-edition.room-focused .notes-status-bar {
@@ -1926,10 +2071,12 @@
 }
 
 .workspace-edition .shared-note-card {
-  background-color: var(--bg-hover);
+  background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-left: 3px solid #a98a60;
+  border-radius: 6px;
   padding: 20px;
+  box-shadow: var(--shadow-xs);
 }
 
 .workspace-edition .shared-note-card-header {
@@ -2060,6 +2207,43 @@
 .file-drop-zone[data-disabled="true"]:hover {
   background-color: var(--bg-card);
   border-color: var(--border-strong);
+}
+
+.file-drop-art {
+  position: relative;
+  width: 44px;
+  height: 36px;
+  margin-bottom: 12px;
+}
+
+.file-drop-art span {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.file-drop-art span:nth-child(1) {
+  transform: rotate(-7deg) translate(-4px, 2px);
+}
+
+.file-drop-art span:nth-child(2) {
+  transform: rotate(5deg) translate(4px, 1px);
+}
+
+.file-drop-art span:nth-child(3) {
+  background: var(--bg-card);
+  border-color: var(--primary-sage);
+}
+
+.file-drop-zone:not([data-disabled="true"]):hover .file-drop-art span:nth-child(1) {
+  transform: rotate(-10deg) translate(-7px, 1px);
+}
+
+.file-drop-zone:not([data-disabled="true"]):hover .file-drop-art span:nth-child(2) {
+  transform: rotate(8deg) translate(7px, 0);
 }
 
 .drop-hint,
@@ -2368,6 +2552,17 @@
     .workspace-edition.room-focused .card-action-btns {
       gap: 2px;
     }
+  }
+}
+
+@media (max-width: 960px) {
+  .workspace-edition.room-focused .meeting-solo .meeting-stage-layout {
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
+  }
+
+  .workspace-edition.room-focused .meeting-waiting-card {
+    min-height: 0;
   }
 }
 

@@ -323,6 +323,26 @@ export function createTextDatabase(directory: string) {
       if (!resource && method === 'GET') return reply({ workspace: { ...db.workspaces.find(row => row.id === workspaceId), role: membership.role } })
       if (resource === 'rooms' && method === 'GET') return reply({ rooms: db.rooms.filter(row => row.workspaceId === workspaceId).map(row => formatRoom(row, membership)) })
       if (membership.role !== 'OWNER') throw new ApiError('Chỉ chủ Workspace được thực hiện thao tác này.', 403)
+      if (!resource && method === 'PATCH') {
+        const workspace = db.workspaces.find(row => row.id === workspaceId)
+        if (!workspace) throw new ApiError('Không tìm thấy Workspace.', 404)
+        workspace.name = text(body, 'name', 3, 120)
+        workspace.updatedAt = now
+        await save(db)
+        return reply({ workspace: { ...workspace, role: 'OWNER' } })
+      }
+      if (!resource && method === 'DELETE') {
+        const workspace = db.workspaces.find(row => row.id === workspaceId)
+        if (!workspace) throw new ApiError('Không tìm thấy Workspace.', 404)
+        db.workspaces = db.workspaces.filter(row => row.id !== workspaceId)
+        db.workspace_members = db.workspace_members.filter(row => row.workspaceId !== workspaceId)
+        db.rooms = db.rooms.filter(row => row.workspaceId !== workspaceId)
+        db.room_members = db.room_members.filter(row => row.workspaceId !== workspaceId)
+        db.room_roles = db.room_roles.filter(row => row.workspaceId !== workspaceId)
+        db.member_statuses = db.member_statuses.filter(row => row.workspaceId !== workspaceId)
+        await save(db)
+        return reply({ deleted: true })
+      }
       if (resource === 'rooms' && method === 'POST') {
         const room = { id: randomUUID(), workspaceId, createdById: user.id, hostId: null, name: text(body, 'name', 2, 120), description: body.description ? text(body, 'description', 0, 255) : null, createdAt: now, updatedAt: now }
         db.rooms.push(room); await save(db)

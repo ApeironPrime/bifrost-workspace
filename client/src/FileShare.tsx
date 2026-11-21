@@ -741,6 +741,11 @@ export const FileShare = memo(function FileShare({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        <div className="file-drop-art" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <p className="drop-hint" id="room-file-hint">
           {isDragging
             ? t("fileShare.dropActive")

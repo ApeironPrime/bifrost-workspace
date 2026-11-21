@@ -177,4 +177,15 @@ test('TXT database supports GET /rooms/:roomId, PATCH/DELETE workspace rooms, an
   const reopened = createTextDatabase(directory)
   const finalRoster = (await reopened.request(`/workspaces/${wsId}/members`, 'GET', authOwner)).body as { members: { userId: string }[] }
   assert.equal(finalRoster.members.some(m => m.userId === host.user.id), false)
+
+  // PATCH & DELETE /workspaces/:wsId are OWNER-only and cascade cleanly.
+  assert.equal((await reopened.request(`/workspaces/${wsId}`, 'PATCH', authMember, { name: 'Blocked' })).status, 403)
+  const patchedWs = await reopened.request(`/workspaces/${wsId}`, 'PATCH', authOwner, { name: 'CRUD WS Renamed' })
+  assert.equal(patchedWs.status, 200)
+  assert.equal((patchedWs.body as { workspace: { name: string } }).workspace.name, 'CRUD WS Renamed')
+
+  assert.equal((await reopened.request(`/workspaces/${wsId}`, 'DELETE', authMember)).status, 403)
+  assert.equal((await reopened.request(`/workspaces/${wsId}`, 'DELETE', authOwner)).status, 200)
+  assert.deepEqual((await reopened.request('/workspaces', 'GET', authOwner)).body, { workspaces: [] })
+  assert.equal((await reopened.request(`/rooms/${roomA}`, 'GET', authOwner)).status, 404)
 })

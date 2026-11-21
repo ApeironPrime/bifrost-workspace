@@ -18,6 +18,8 @@ interface MeetingTabProps {
   t: (key: I18nKey, params?: Record<string, string | number>) => string
 }
 
+const AMBIENT_WAVE_HEIGHTS = [6, 12, 20, 10, 26, 17, 9, 22, 14, 8, 16, 10, 6] as const
+
 /** Presence is real; media is not connected yet. Never render avatar tiles as live video. */
 export const MeetingTab = memo(function MeetingTab({ currentUserId, currentUserName, currentUserAvatar, roomName,
   onlinePeers, onLeaveRoom, onCopyRoomId, copiedRoomId, onInvite, t }: MeetingTabProps) {
@@ -29,39 +31,73 @@ export const MeetingTab = memo(function MeetingTab({ currentUserId, currentUserN
       <p className="meeting-notice-banner" id="meeting-device-notice">
         <Info size={16} aria-hidden="true" /><span>{mediaNotice}</span>
       </p>
-      <div className={`meeting-grid count-${Math.min(1 + remotePeers.length, 6)}`}>
-        <div className="video-tile local-tile">
-          <span className="tile-device-state"><VideoOff size={12} aria-hidden="true" />{previewBadge}</span>
-          <UserAvatar name={currentUserName} src={currentUserAvatar} size={80} seed={currentUserId} className="participant-avatar" />
-          <div className="participant-tag">
-            <MicOff size={14} aria-hidden="true" />
-            <span className="tag-name">{currentUserName} ({t('meeting.you')})</span>
-          </div>
-        </div>
-        {remotePeers.map(peer => (
-          <div className="video-tile remote-tile" key={peer.peerId}>
-            <span className="tile-device-state">{previewBadge}</span>
-            <UserAvatar name={peer.name} size={80} seed={peer.userId} className="participant-avatar" />
-            <div className="participant-tag"><span className="tag-name">{peer.name}</span></div>
-          </div>
-        ))}
-      </div>
-      {remotePeers.length === 0 && (
-        <div className="meeting-waiting-card">
-          <Users size={24} aria-hidden="true" />
-          <div><h3>{t('meeting.waitingTitle')}</h3><p>{t('meeting.waitingSubtitle')}</p>
-            <div className="meeting-waiting-actions">
-            {onInvite && <button type="button" className="btn btn-primary" onClick={onInvite}>
-              <UserPlus size={16} aria-hidden="true" />{t('meeting.inviteTeammates')}
-            </button>}
-            <button type="button" className="btn btn-secondary" title={roomName} onClick={onCopyRoomId}>
-              {copiedRoomId ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-              {copiedRoomId ? t('rightPanel.copied') : t('rightPanel.copyRoomId')}
-            </button>
+      <div className="meeting-stage-layout">
+        <div className={`meeting-grid count-${Math.min(1 + remotePeers.length, 6)}`}>
+          <div className="video-tile local-tile">
+            <svg className="tile-bridge-art" viewBox="0 0 300 180" fill="none" aria-hidden="true">
+              <path d="M-20 175C70 175 50 20 150 20s80 155 170 155" />
+              <path d="M-20 185C70 185 50 30 150 30s80 155 170 155" />
+            </svg>
+            <span className="tile-coordinate-stamp" aria-hidden="true">B / 001</span>
+            <span className="tile-device-state"><VideoOff size={12} aria-hidden="true" />{previewBadge}</span>
+            <UserAvatar name={currentUserName} src={currentUserAvatar} size={80} seed={currentUserId} className="participant-avatar" />
+            <div className="tile-ambient-wave" aria-hidden="true">
+              {AMBIENT_WAVE_HEIGHTS.map((height, index) => (
+                <i key={index} style={{ height }} />
+              ))}
+            </div>
+            <div className="participant-tag">
+              <MicOff size={14} aria-hidden="true" />
+              <span className="tag-name">{currentUserName} ({t('meeting.you')})</span>
             </div>
           </div>
+          {remotePeers.map(peer => (
+            <div className="video-tile remote-tile" key={peer.peerId}>
+              <svg className="tile-bridge-art" viewBox="0 0 300 180" fill="none" aria-hidden="true">
+                <path d="M-20 175C70 175 50 20 150 20s80 155 170 155" />
+                <path d="M-20 185C70 185 50 30 150 30s80 155 170 155" />
+              </svg>
+              <span className="tile-device-state">{previewBadge}</span>
+              <UserAvatar name={peer.name} size={80} seed={peer.userId} className="participant-avatar" />
+              <div className="tile-ambient-wave" aria-hidden="true">
+                {AMBIENT_WAVE_HEIGHTS.map((height, index) => (
+                  <i key={index} style={{ height }} />
+                ))}
+              </div>
+              <div className="participant-tag"><span className="tag-name">{peer.name}</span></div>
+            </div>
+          ))}
         </div>
-      )}
+        {remotePeers.length === 0 && (
+          <div className="meeting-waiting-card">
+            <svg className="waiting-card-bridge" viewBox="0 0 300 180" fill="none" aria-hidden="true">
+              <path d="M-20 175C70 175 50 20 150 20s80 155 170 155" />
+              <path d="M-20 185C70 185 50 30 150 30s80 155 170 155" />
+            </svg>
+            <div className="waiting-card-head">
+              <Users size={20} aria-hidden="true" />
+              <span>WebRTC · P2P</span>
+            </div>
+            <div className="waiting-card-body">
+              <h3>{t('meeting.waitingTitle')}</h3>
+              <p>{t('meeting.waitingSubtitle')}</p>
+              <div className="meeting-waiting-actions">
+                {onInvite && <button type="button" className="btn btn-primary" onClick={onInvite}>
+                  <UserPlus size={16} aria-hidden="true" />{t('meeting.inviteTeammates')}
+                </button>}
+                <button type="button" className="btn btn-secondary" title={roomName} onClick={onCopyRoomId}>
+                  {copiedRoomId ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+                  {copiedRoomId ? t('rightPanel.copied') : t('rightPanel.copyRoomId')}
+                </button>
+              </div>
+            </div>
+            <div className="waiting-card-colophon" aria-hidden="true">
+              <span>WebRTC · P2P</span>
+              <span>B / 001</span>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="meeting-controls-bar" role="toolbar" aria-label={t('meeting.title')}
         onKeyDown={event => {
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return

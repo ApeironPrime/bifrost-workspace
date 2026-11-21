@@ -681,6 +681,7 @@ export const WorkspaceMembers = memo(function WorkspaceMembers(props: Props) {
   const [editing, setEditing] = useState<{ member: Member; roomId: string } | null>(null)
   const [labelRoom, setLabelRoom] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [activeGroupId, setActiveGroupId] = useState<string>('__all')
   const capabilityNoteId = useId()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const lastManagedIdRef = useRef<string | null>(null)
@@ -1017,7 +1018,42 @@ export const WorkspaceMembers = memo(function WorkspaceMembers(props: Props) {
           </button>
         </div>
       ) : (
-        visibleGroups
+        <>
+        {visibleGroups.length > 1 && !query.trim() && (
+          <div className="member-group-filter-bar" role="group" aria-label={t('members.sectionTitle')}>
+            {(() => {
+              const effectiveGroupId = visibleGroups.some((g) => g.id === activeGroupId) ? activeGroupId : '__all'
+              return (
+                <>
+                  <button
+                    type="button"
+                    className={`member-group-pill ${effectiveGroupId === '__all' ? 'is-active' : ''}`}
+                    aria-pressed={effectiveGroupId === '__all'}
+                    onClick={() => setActiveGroupId('__all')}
+                  >
+                    <span>{t('members.filterAllGroups', { count: effectiveMembers.length })}</span>
+                  </button>
+                  {visibleGroups.map((group) => (
+                    <button
+                      key={`pill:${group.id}`}
+                      type="button"
+                      className={`member-group-pill ${effectiveGroupId === group.id ? 'is-active' : ''}`}
+                      aria-pressed={effectiveGroupId === group.id}
+                      onClick={() => setActiveGroupId(group.id)}
+                    >
+                      <span>{group.name}</span>
+                      <small>{group.members.length}</small>
+                    </button>
+                  ))}
+                </>
+              )
+            })()}
+          </div>
+        )}
+        {(visibleGroups.some((g) => g.id === activeGroupId) && activeGroupId !== '__all' && !query.trim()
+          ? visibleGroups.filter((g) => g.id === activeGroupId)
+          : visibleGroups
+        )
           .map((group) => {
             const emptyGroupCopy = !mock
               ? group.id === '__live_room'
@@ -1205,7 +1241,8 @@ export const WorkspaceMembers = memo(function WorkspaceMembers(props: Props) {
               )}
             </div>
             )
-          })
+          })}
+        </>
       )}
 
       <MotionPresence present={labelRoom !== null}>
