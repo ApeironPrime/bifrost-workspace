@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { createAccessToken } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { getAuthRateLimiters } from "../lib/rateLimit.js";
 import { requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
@@ -47,7 +48,7 @@ authRouter.post("/register", async (request, response, next) => {
   }
 });
 
-authRouter.post("/login", async (request, response, next) => {
+authRouter.post("/login", getAuthRateLimiters().loginAccountLimiter, async (request, response, next) => {
   try {
     const input = credentialsSchema.parse(request.body);
     const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });

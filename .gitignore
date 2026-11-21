@@ -1,7 +1,13 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
 *.log
+.local-data/
+secrets/
+.secrets/
+*.turn-secret
 **/.agents/
 **/.claude/
 **/.windsurf/

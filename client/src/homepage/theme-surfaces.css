@@ -1,0 +1,60 @@
+/* The artwork keeps its green material; interface surfaces respond to the theme. */
+.bifrost-home :is(.sculpture-topline,.sculpture-foot,.sculpture-session-people>small,.sculpture-session-result small,.atelier-masthead,.atelier-eyebrow,.atelier-stage-label,.atelier-paper header,.atelier-paper>small,.atelier-paper footer,.atelier-presence header,.atelier-presence footer,.atelier-faces small,.outcome-edition,.outcome-idea footer,.outcome-resources>div>span>small,.outcome-resources>div>small,.outcome-next>small,.outcome-action>div>span) { font-size:12px; line-height:1.6; }
+.bifrost-home :is(.atelier-description,.sculpture-aside,.outcome-action p) { font-size:14px; line-height:1.8; }
+.bifrost-home { --bg-card:#fbf8ef; --text-main:#293e32; --text-muted:#63705b; }
+.bifrost-home[data-theme=dark] { --bg-card:#253c31; --text-main:#e9e4d2; --text-muted:#b3bfa6; }
+.bifrost-home .homepage-theme-toggle { display:flex; align-items:center; justify-content:center; gap:7px; min-height:40px; min-width:72px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); color:var(--text); font-size:12px; white-space:nowrap; }
+.homepage-theme-toggle svg { flex-shrink:0; }
+.bifrost-home[data-theme=light] { --text:#293e32; --muted:#53654e; --surface2:#e9e8dc; --border:#75826555; background:#f2efe4; color:#293e32; }
+.bifrost-home[data-theme=light] .homepage-nav { background:#f2efe4; border-color:#75826540; }
+.bifrost-home[data-theme=light] .landing-brand,
+.bifrost-home[data-theme=light] .homepage-nav>nav>a { color:#293e32; }
+.bifrost-home[data-theme=light] .homepage-menu-button { color:#293e32; border-color:#75826555; }
+.bifrost-home[data-theme=light] .language-select .select-menu-trigger:hover,
+.bifrost-home[data-theme=light] .language-select .select-menu-trigger[aria-expanded=true],
+.bifrost-home[data-theme=light] .homepage-theme-toggle:hover { background:#dedfce; border-color:#9b7b51; }
+.bifrost-home[data-theme=light] .sculpture-hero { background:#f2efe4; color:#293e32; }
+.bifrost-home[data-theme=light] .sculpture-art img { opacity:.48; mix-blend-mode:multiply; }
+.bifrost-home[data-theme=light] .sculpture-hero::before { background:linear-gradient(90deg,#f2efe4 0%,#f2efe4b0 42%,#f2efe470 100%),linear-gradient(0deg,#f2efe4,transparent 55%); }
+.bifrost-home[data-theme=light] .sculpture-heading h1 { color:#293e32; }
+.bifrost-home[data-theme=light] .sculpture-heading h1 em,
+.bifrost-home[data-theme=light] .sculpture-heading>p { color:#876744; }
+.bifrost-home[data-theme=light] :is(.sculpture-topline,.sculpture-aside,.sculpture-foot,.sculpture-inspect,.sculpture-inspect small,.sculpture-invitation>p) { color:#40533e; }
+.bifrost-home[data-theme=light] .sculpture-foot { border-color:#75826544; }
+.bifrost-home[data-theme=light] .sculpture-foot a { color:#40533e; }
+.bifrost-home[data-theme=light] .sculpture-inspect>span { border-color:#75826566; }
+.bifrost-home[data-theme=light] .sculpture-session::before { background:radial-gradient(ellipse,#f2efe4f2,transparent 75%); }
+.bifrost-home[data-theme=light] :is(.sculpture-session-thought,.sculpture-session-result,.sculpture-session-result span,.sculpture-session-result small,.sculpture-session-people>small) { color:#304a36; }
+.bifrost-home[data-theme=light] .sculpture-session-result { border-color:#75826555; }
+.bifrost-home[data-theme=light] .sculpture-session-people>span:not(.sculpture-wave) { background:#dce1cf; color:#304a36; border-color:#75826555; }
+.bifrost-home[data-theme=light] .collab-atelier { --atelier-cream:#293e32; background:#e8eadd; color:#293e32; }
+.bifrost-home[data-theme=light] :is(.atelier-masthead,.atelier-eyebrow,.atelier-description,.atelier-stage-label,.atelier-coordinate,.atelier-coordinate>span,.atelier-caption) { color:#506248; }
+.bifrost-home[data-theme=light] .atelier-masthead>small { color:#506248; }
+.bifrost-home[data-theme=light] :is(.atelier-masthead,.atelier-colophon,.atelier-lenses button) { border-color:#75826540; }
+.bifrost-home[data-theme=light] .atelier-editorial h2 { color:#293e32; }
+.bifrost-home[data-theme=light] .atelier-editorial h2 em { color:#876744; }
+.bifrost-home[data-theme=light] .atelier-lenses button { color:#53644b; }
+.bifrost-home[data-theme=light] .atelier-lenses button[aria-pressed=true],
+.bifrost-home[data-theme=light] .atelier-lenses button:hover { color:#213f2d; }
+.bifrost-home[data-theme=light] .atelier-lenses button[aria-pressed=true] strong { font-weight:600; }
+.bifrost-home[data-theme=light] :is(.atelier-enter,.atelier-colophon p,.atelier-lenses button>span:first-child) { color:#876744; }
+.bifrost-home[data-theme=light] :is(.atelier-colophon>span,.atelier-colophon a,.atelier-stage-label>span:last-child) { color:#506248; }
+.bifrost-home[data-theme=dark] .collab-atelier { background:#1c332c; }
+.bifrost-home[data-theme=dark] .atelier-paper { background:#293f33; color:#e7e5d5; border-color:#b9c5a83b; }
+.bifrost-home[data-theme=dark] .atelier-paper h3 { color:#e7e5d5; }
+.bifrost-home[data-theme=dark] :is(.atelier-paper header,.atelier-paper>small,.atelier-paper>p,.atelier-paper-lines>span,.atelier-paper footer) { color:#bcc9b0; }
+.bifrost-home[data-theme=dark] .atelier-paper header>span:last-child { color:#d2b18c; }
+.bifrost-home[data-theme=dark] :is(.atelier-paper header,.atelier-paper footer) { border-color:#b9c5a83b; }
+/* A small status label is not a decorative foreign-language seal. */
+.atelier-paper header>span:last-child { font:500 10px/1.4 'DM Sans','Noto Sans JP',sans-serif; letter-spacing:.04em; }
+.atelier-coordinate { letter-spacing:.07em; }
+@media(max-width:760px) {
+  .bifrost-home[data-theme=light] .homepage-nav>nav { background:#f2efe4; border-color:#75826555; }
+  .bifrost-home[data-theme=light] .homepage-nav>nav>a { color:#293e32; border-color:#75826540; }
+  .bifrost-home .homepage-theme-toggle { min-width:62px; padding-inline:7px; gap:5px; }
+}
+@media(max-width:360px) {
+  .bifrost-home { --home-gutter:16px; }
+  .bifrost-home .homepage-theme-toggle { width:40px; min-width:40px; padding:8px; }
+  .homepage-theme-toggle>span { display:none; }
+}

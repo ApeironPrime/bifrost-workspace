@@ -1,0 +1,373 @@
+.profile-setup {
+  min-height: 100dvh;
+  background: #eeece1;
+  color: #293e32;
+  font-family: 'DM Sans', sans-serif;
+  padding: 0 clamp(22px, 5vw, 90px) 35px;
+}
+
+.profile-setup * {
+  box-sizing: border-box;
+}
+
+.profile-setup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 90px;
+  border-bottom: 1px solid #75826533;
+}
+
+.profile-setup-header a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  color: inherit;
+  text-decoration: none;
+}
+
+.profile-setup-header button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: none;
+  border: 0;
+  color: #67735f;
+  cursor: pointer;
+  font-size: 12px;
+  min-height: 44px;
+}
+
+.profile-setup-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(35px, 8vw, 140px);
+  max-width: 1120px;
+  margin: 45px auto 0;
+  align-items: start;
+}
+
+.profile-kicker {
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  color: #788064;
+  margin: 0 0 22px;
+}
+
+.profile-setup-intro {
+  padding: 25px 0;
+}
+
+.profile-setup-intro h1 {
+  font: 400 clamp(42px, 4vw, 65px)/1.07 'Newsreader', Georgia, serif;
+  letter-spacing: -0.035em;
+  margin: 0 0 25px;
+}
+
+.profile-setup-intro > p:not(.profile-kicker) {
+  font-size: 13px;
+  color: #67735f;
+  line-height: 1.9;
+  max-width: 340px;
+}
+
+.profile-setup-steps {
+  list-style: none;
+  padding: 0;
+  margin: 30px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.profile-setup-steps li {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 12px;
+  color: #85907a;
+}
+
+.profile-setup-steps li[aria-current] {
+  color: #293e32;
+}
+
+.profile-setup-steps li > span {
+  border: 1px solid #75826544;
+  border-radius: 50%;
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+}
+
+.profile-setup-steps li[aria-current] > span {
+  background: #344f3a;
+  border-color: #344f3a;
+  color: #eeece1;
+}
+
+.profile-preview {
+  margin-top: 38px;
+  padding: 24px;
+  border: 1px solid #75826533;
+  border-radius: 24px 3px 3px 3px;
+  display: grid;
+  grid-template-columns: 53px minmax(0, 1fr);
+  gap: 5px 16px;
+  max-width: 360px;
+}
+
+.profile-preview > div,
+.profile-preview > .user-avatar {
+  grid-row: 1 / 4;
+  width: 53px;
+  height: 53px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #f4eedc;
+  font: 25px 'Newsreader', serif;
+}
+
+.profile-preview > div {
+  overflow: hidden;
+}
+
+.profile-preview > div img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-preview strong {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  align-self: end;
+}
+
+.profile-preview > span,
+.profile-preview > small {
+  color: #67735f;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.profile-setup-paper {
+  background: #f8f6ee;
+  padding: 32px 38px;
+  border: 1px solid #75826533;
+  border-radius: 35px 4px 4px 4px;
+  margin-block: auto;
+}
+
+.profile-setup-paper .profile-kicker {
+  margin-bottom: 13px;
+}
+
+.profile-setup-paper h2 {
+  font: 400 35px 'Newsreader', serif;
+  margin: 0 0 24px;
+  letter-spacing: -0.02em;
+}
+
+.profile-setup-paper fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 19px;
+  min-width: 0;
+}
+
+.profile-setup-paper fieldset > label {
+  display: block;
+  font-size: 12px;
+}
+
+.profile-setup-paper input:not([type=radio]) {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #75826555;
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0;
+  font: 14px 'DM Sans', sans-serif;
+  color: #293e32;
+  outline-offset: 3px;
+}
+
+.profile-setup-paper input[type=file] {
+  display: none;
+}
+
+.profile-setup-paper input::placeholder {
+  color: var(--text-placeholder, #56615a);
+  font-size: 12px;
+}
+
+.profile-setup-paper input[readonly] {
+  color: #7f8974;
+}
+
+.profile-setup-paper small {
+  font-size: 10px;
+  color: #7f8974;
+  line-height: 1.5;
+}
+
+.profile-setup-paper input + small {
+  display: block;
+  margin-top: 6px;
+}
+
+.profile-save {
+  margin-top: 27px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 0;
+  border-radius: 3px;
+  background: #344f3a;
+  color: #f2eddd;
+  min-height: 50px;
+  padding: 14px 19px;
+  font: 13px 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.profile-save:hover {
+  background: #24422f;
+}
+
+.profile-save:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.profile-setup-footnote {
+  font-size: 10px;
+  color: #7f8974;
+  line-height: 1.8;
+  margin: 14px 0 0;
+}
+
+.profile-save-error {
+  font-size: 12px;
+  color: #a04432;
+  line-height: 1.6;
+}
+
+.profile-setup :focus-visible {
+  outline: 2px solid #a18460;
+  outline-offset: 3px;
+}
+
+@media (min-width: 1500px) {
+  .profile-setup-layout {
+    margin-top: 65px;
+  }
+
+  .profile-setup-paper {
+    padding: 40px 45px;
+  }
+}
+
+@media (max-width: 760px) {
+  .profile-setup-header {
+    height: 72px;
+  }
+
+  .profile-setup-layout {
+    grid-template-columns: 1fr;
+    margin-top: 25px;
+    gap: 20px;
+  }
+
+  .profile-setup-intro {
+    padding: 0;
+  }
+
+  .profile-setup-intro h1 {
+    font-size: 43px;
+    margin-bottom: 15px;
+  }
+
+  .profile-setup-steps {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin: 23px 0 0;
+  }
+
+  .profile-setup-steps li {
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .profile-preview {
+    display: none;
+  }
+
+  .profile-setup-paper {
+    padding: 27px 24px;
+  }
+
+  .profile-setup-paper h2 {
+    font-size: 31px;
+  }
+}
+
+@media (min-width: 761px) and (max-height: 800px) {
+  .profile-setup {
+    padding-bottom: 22px;
+  }
+
+  .profile-setup-intro {
+    padding-top: 15px;
+  }
+
+  .profile-setup-header {
+    height: 64px;
+  }
+
+  .profile-setup-layout {
+    margin-top: 16px;
+  }
+
+  .profile-setup-paper {
+    padding: 21px 30px;
+  }
+
+  .profile-setup-paper h2 {
+    font-size: 30px;
+    margin-bottom: 14px;
+  }
+
+  .profile-setup-paper fieldset {
+    gap: 13px;
+  }
+
+  .profile-setup-paper input:not([type=radio]):not([type=file]) {
+    padding: 7px 0;
+  }
+
+  .profile-save {
+    min-height: 44px;
+    margin-top: 17px;
+  }
+
+  .profile-setup-footnote {
+    margin-top: 10px;
+  }
+}

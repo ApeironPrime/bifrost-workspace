@@ -1,0 +1,72 @@
+/* One consistent motion vocabulary for active homepage sections. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.homepage) {
+    scroll-behavior: smooth;
+  }
+
+  .homepage {
+    --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .homepage [data-reveal] {
+    transition: opacity 0.8s var(--motion-ease), transform 0.9s var(--motion-ease);
+  }
+
+  .homepage [data-reveal="pending"] {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  .homepage [data-reveal="shown"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .homepage .sculpture-invitation > button {
+    transition: transform 0.35s var(--motion-ease), background 0.3s, box-shadow 0.35s;
+  }
+
+  .homepage .sculpture-invitation > button:active {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .homepage .sculpture-invitation > button > :is(span, svg) {
+    transition: transform 0.4s var(--motion-ease);
+  }
+
+  .homepage .sculpture-aside {
+    animation: room-content-arrive 0.9s 0.2s var(--motion-ease) both;
+  }
+
+  .homepage .sculpture-session {
+    animation: room-content-arrive 1s 0.4s var(--motion-ease) both;
+  }
+
+  @media (max-width: 760px) {
+    .homepage-nav > nav.is-open {
+      animation: room-content-arrive 0.3s var(--motion-ease) both;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .homepage .sculpture-invitation > button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px -12px #0008;
+    }
+
+    .homepage .sculpture-invitation > button:hover > :is(span, svg) {
+      transform: translate(3px, -2px);
+    }
+  }
+}
+
+@keyframes room-content-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

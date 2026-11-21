@@ -1,0 +1,10 @@
+.avatar-picker-error {
+  font-size: 11px;
+  color: #a04432;
+  line-height: 1.6;
+}
+
+.workspace-edition .modal-card:has(.avatar-picker) {
+  max-height: 90dvh;
+  overflow-y: auto;
+}

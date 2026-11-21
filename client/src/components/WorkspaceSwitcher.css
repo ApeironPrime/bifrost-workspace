@@ -1,0 +1,17 @@
+.workspace-edition .workspace-picker{width:100%}
+.workspace-edition .workspace-picker .select-menu-trigger{color:#e9e8d7;border-color:#a9bc9b33;background:#c0cbb307;padding:9px 11px;min-height:56px;gap:8px;border-radius:8px;transition:border-color 150ms ease,background-color 150ms ease}
+.workspace-edition .workspace-picker .select-menu-trigger:hover:not(:disabled),.workspace-edition .workspace-picker .select-menu-trigger[aria-expanded=true]{border-color:#b7c4a96b;background:#c0cbb312}
+.workspace-edition .workspace-picker.is-error .select-menu-trigger{border-color:#d4927a7a;background:#c97b6212}
+.workspace-edition .workspace-picker.is-error .workspace-picker-avatar{border-color:#d4927a66;background:#c97b621c;color:#f3d4c8}
+.workspace-edition .workspace-picker.is-error .workspace-picker-role{color:#e8bfb0}
+.workspace-picker-current{display:flex;align-items:center;gap:10px;min-width:0}
+.workspace-picker-avatar{display:grid;place-items:center;width:32px;height:32px;border:1px solid #b2c3a838;border-radius:8px;background:#b2c3a810;color:#dfe5d2;font-size:11px;font-weight:500;letter-spacing:.03em;flex-shrink:0}
+.workspace-picker-copy{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.workspace-picker-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:1.4;color:#f0eee0}
+.workspace-picker-role{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#b8c6aa;line-height:1.35}
+.workspace-picker.is-compact .select-menu-chevron,.workspace-picker.is-compact .workspace-picker-copy{display:none}
+.workspace-picker.is-compact .workspace-picker-current{justify-content:center;width:100%}
+.workspace-picker.is-compact .workspace-picker-avatar{position:relative;border:0;background:transparent;width:42px;height:42px;font-size:12px}
+.workspace-picker.is-compact .workspace-picker-avatar::after{content:'▾';position:absolute;right:4px;bottom:2px;font-size:8px;line-height:1;color:#aebd9d}
+.select-menu-footer>button:disabled{opacity:.55;cursor:not-allowed}
+@media(prefers-reduced-motion:reduce){.workspace-edition .workspace-picker .select-menu-trigger{transition:none}}

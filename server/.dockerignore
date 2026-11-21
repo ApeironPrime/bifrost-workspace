@@ -1,4 +1,11 @@
 node_modules
 dist
 .env
+.env.*
+!.env.example
+secrets
+.secrets
+*.turn-secret
+*.key
+*.pem
 npm-debug.log

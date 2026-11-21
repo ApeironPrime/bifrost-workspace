@@ -1,0 +1,24 @@
+.user-avatar {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  color: #f4eedc;
+  font-family: 'DM Sans', 'Noto Sans JP', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.user-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-avatar-initials {
+  line-height: 1;
+}

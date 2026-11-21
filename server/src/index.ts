@@ -1,45 +1,30 @@
+import "dotenv/config";
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
 import { createServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 import { ZodError, z } from "zod";
 import { verifyAccessToken } from "./lib/auth.js";
 import { prisma } from "./lib/prisma.js";
+import {
+  RATE_LIMIT_EXPOSED_HEADERS,
+  getAuthRateLimiters,
+  parseTrustProxySetting,
+} from "./lib/rateLimit.js";
+import { getRoomPresence, revokeWorkspaceMemberSessions } from "./lib/revocation.js";
+import { createTurnServiceFromEnv } from "./lib/turn.js";
 import { authRouter } from "./routes/auth.js";
 import { roomRouter } from "./routes/rooms.js";
-import { workspaceRouter } from "./routes/workspaces.js";
-
-dotenv.config();
+import { createTurnRouter } from "./routes/turn.js";
+import { createWorkspaceRouter } from "./routes/workspaces.js";
 
 const app = express();
+app.set("trust proxy", parseTrustProxySetting(process.env.TRUST_PROXY));
+const authRateLimiters = getAuthRateLimiters();
+const turnService = createTurnServiceFromEnv();
 const httpServer = createServer(app);
 const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
 const port = Number(process.env.PORT ?? 3000);
-
-app.use(cors({ origin: clientUrl }));
-app.use(express.json());
-
-app.get("/api/health", (_request, response) => {
-  response.json({
-    status: "ok",
-    service: "bifrost-signaling-server",
-    realtime: "webrtc-p2p-signaling",
-  });
-});
-
-app.use("/api/auth", authRouter);
-app.use("/api/workspaces", workspaceRouter);
-app.use("/api/rooms", roomRouter);
-
-app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  if (error instanceof ZodError) {
-    response.status(400).json({ message: error.issues[0]?.message ?? "Dữ liệu không hợp lệ." });
-    return;
-  }
-  console.error(error);
-  response.status(500).json({ message: "Đã xảy ra lỗi máy chủ." });
-});
 
 declare module "socket.io" {
   interface SocketData {
@@ -60,6 +45,43 @@ type PresencePeer = {
 
 const io = new Server(httpServer, {
   cors: { origin: clientUrl },
+});
+
+app.use(
+  cors({
+    origin: clientUrl,
+    exposedHeaders: [...RATE_LIMIT_EXPOSED_HEADERS],
+  }),
+);
+app.post("/api/auth/login", authRateLimiters.loginIpLimiter);
+app.post("/api/auth/register", authRateLimiters.registerIpLimiter);
+app.use(express.json());
+
+app.get("/api/health", (_request, response) => {
+  response.json({
+    status: "ok",
+    service: "bifrost-signaling-server",
+    realtime: "webrtc-p2p-signaling",
+  });
+});
+
+app.use("/api/auth", authRouter);
+app.use(
+  "/api/workspaces",
+  createWorkspaceRouter(prisma, {
+    onMemberRemoved: (event) => revokeWorkspaceMemberSessions(io, prisma, event),
+  }),
+);
+app.use("/api/rooms", roomRouter);
+app.use("/api/turn", createTurnRouter(prisma, turnService));
+
+app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+  if (error instanceof ZodError) {
+    response.status(400).json({ message: error.issues[0]?.message ?? "Dữ liệu không hợp lệ." });
+    return;
+  }
+  console.error(error);
+  response.status(500).json({ message: "Đã xảy ra lỗi máy chủ." });
 });
 
 io.use(async (socket, next) => {
@@ -92,29 +114,12 @@ const signalSchema = z.object({
   payload: z.unknown(),
 });
 
-function getRoomPresence(ioServer: Server, socketRoomKey: string): PresencePeer[] {
-  const socketIds = ioServer.sockets.adapter.rooms.get(socketRoomKey) ?? new Set();
-  const list: PresencePeer[] = [];
-  for (const sid of socketIds) {
-    const s = ioServer.sockets.sockets.get(sid);
-    if (s?.data?.user) {
-      list.push({
-        peerId: sid,
-        userId: s.data.user.id,
-        name: s.data.user.name,
-        email: s.data.user.email,
-      });
-    }
-  }
-  return list;
-}
-
-function leaveRoomInternal(socket: Socket, socketRoomKey: string) {
+async function leaveRoomInternal(socket: Socket, socketRoomKey: string) {
   if (!socket.rooms.has(socketRoomKey)) return;
   const roomId = socketRoomKey.replace("room:", "");
-  socket.leave(socketRoomKey);
+  await socket.leave(socketRoomKey);
   socket.to(socketRoomKey).emit("room:peer-left", { peerId: socket.id });
-  const remainingPresence = getRoomPresence(io, socketRoomKey);
+  const remainingPresence = await getRoomPresence(io, socketRoomKey);
   io.to(socketRoomKey).emit("presence:changed", {
     roomId,
     peers: remainingPresence,
@@ -154,23 +159,29 @@ io.on("connection", (socket) => {
         },
       });
 
+      const socketRoomKey = `room:${roomId}`;
+
       if (!room) {
+        if (socket.rooms.has(socketRoomKey)) {
+          await leaveRoomInternal(socket, socketRoomKey);
+        }
         socket.emit("room:error", { message: "Room không tồn tại." });
         return;
       }
 
       if (room.workspace.members.length === 0) {
+        if (socket.rooms.has(socketRoomKey)) {
+          await leaveRoomInternal(socket, socketRoomKey);
+        }
         socket.emit("room:error", { message: "Bạn không thuộc workspace chứa room này." });
         return;
       }
-
-      const socketRoomKey = `room:${roomId}`;
 
       // A reconnecting client can emit room:join more than once. Joining the
       // same Socket Room is idempotent, but broadcasting peer-joined twice is
       // not: it can cause peers to recreate/close their WebRTC connection.
       if (socket.rooms.has(socketRoomKey)) {
-        const presence = getRoomPresence(io, socketRoomKey);
+        const presence = await getRoomPresence(io, socketRoomKey);
         socket.emit("room:joined", {
           roomId,
           roomName: room.name,
@@ -185,13 +196,33 @@ io.on("connection", (socket) => {
       const existingRooms = [...socket.rooms].filter((r) => r.startsWith("room:"));
       for (const priorRoomKey of existingRooms) {
         if (priorRoomKey !== socketRoomKey) {
-          leaveRoomInternal(socket, priorRoomKey);
+          await leaveRoomInternal(socket, priorRoomKey);
         }
       }
 
-      socket.join(socketRoomKey);
+      if (!socket.connected) return;
+      await socket.join(socketRoomKey);
 
-      const presence = getRoomPresence(io, socketRoomKey);
+      // Re-verify membership after joining the Socket.IO room so an in-flight
+      // removal during the initial DB query cannot leave an unauthorized socket inside.
+      const stillMember = await prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: room.workspaceId,
+            userId: socket.data.user.id,
+          },
+        },
+        select: { userId: true },
+      });
+      if (!stillMember || !socket.connected) {
+        await socket.leave(socketRoomKey);
+        if (socket.connected) {
+          socket.emit("room:error", { message: "Bạn không thuộc workspace chứa room này." });
+        }
+        return;
+      }
+
+      const presence = await getRoomPresence(io, socketRoomKey);
       const peers = presence.filter((p) => p.peerId !== socket.id).map((p) => p.peerId);
 
       socket.emit("room:joined", {
@@ -220,10 +251,10 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("room:leave", (rawRoomId: unknown) => {
+  socket.on("room:leave", async (rawRoomId: unknown) => {
     const parsedRoomId = roomIdSchema.safeParse(rawRoomId);
     if (parsedRoomId.success) {
-      leaveRoomInternal(socket, `room:${parsedRoomId.data}`);
+      await leaveRoomInternal(socket, `room:${parsedRoomId.data}`);
     }
   });
 

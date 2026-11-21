@@ -1,0 +1,582 @@
+.bifrost-home .sculpture-hero {
+  --art-x: 0px;
+  --art-y: 0px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 650px;
+  height: calc(100svh - 86px);
+  max-height: 1100px;
+  background: #152e2a;
+  color: #eeeadc;
+  padding: 28px var(--home-gutter) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sculpture-art {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  animation: paper-light-arrive 1.4s ease both;
+}
+
+.sculpture-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 60% 52%;
+  transform: translate(var(--art-x), var(--art-y)) scale(1.025);
+  transition: transform 1.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 82%, transparent 100%);
+}
+
+.sculpture-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, #152e2ac9 0%, #152e2a40 32%, transparent 60%),
+    linear-gradient(0deg, #152e2a 0%, #152e2a08 28%, transparent 55%);
+}
+
+.sculpture-topline,
+.sculpture-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #b6c0ad;
+}
+
+.sculpture-topline {
+  animation: paper-caption-arrive 0.7s ease both;
+}
+
+.sculpture-topline > span:last-child {
+  letter-spacing: 0.2em;
+}
+
+.sculpture-heading {
+  margin-top: clamp(28px, 5vh, 65px);
+  pointer-events: none;
+  animation: paper-title-arrive 0.9s 0.1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.sculpture-heading > p {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: #c9ae8d;
+  margin: 0 0 20px;
+}
+
+.sculpture-hero .sculpture-heading h1 {
+  font: 400 clamp(65px, 7.3vw, 132px)/1 'Newsreader', Georgia, serif;
+  letter-spacing: -0.055em;
+  color: #eeeadc;
+  margin: 0;
+}
+
+.sculpture-heading h1 em {
+  font-weight: 400;
+  color: #d2af88;
+}
+
+.sculpture-aside {
+  position: absolute;
+  top: clamp(80px, 13vh, 160px);
+  right: var(--home-gutter);
+  font-size: 13px !important;
+  line-height: 1.8;
+  color: #c3ccba;
+  max-width: 240px;
+}
+
+.sculpture-art-label {
+  position: absolute;
+  right: 8%;
+  bottom: 25%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #d0c0a1;
+  transition: opacity 0.5s;
+}
+
+.sculpture-art-label small {
+  font-size: 10px;
+  letter-spacing: 0.17em;
+}
+
+.sculpture-art-label > span:last-child {
+  font: italic 19px 'Newsreader', Georgia, serif;
+}
+
+.sculpture-hero .sculpture-session {
+  right: var(--home-gutter);
+  bottom: 24%;
+  gap: 13px;
+  width: 310px;
+  max-width: 35%;
+  color: #ddd9c5;
+  isolation: isolate;
+}
+
+.sculpture-session::before {
+  content: '';
+  position: absolute;
+  inset: -20px -15px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse, #10291fe6, transparent 75%);
+  filter: blur(12px);
+}
+
+.sculpture-session-people {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.sculpture-session-people > span:not(.sculpture-wave) {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border: 1px solid #c0c8ae60;
+  border-radius: 50%;
+  font: 11px 'Newsreader', serif;
+  color: #d9ddc7;
+}
+
+.sculpture-session-people > span:nth-child(2) {
+  margin-left: -15px;
+  background: #253d30;
+}
+
+.sculpture-session-people > small {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #acbba2;
+  margin-left: 3px;
+}
+
+.sculpture-wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 15px;
+  color: #cbb18b;
+}
+
+.sculpture-wave i {
+  width: 1px;
+  height: 4px;
+  background: currentColor;
+}
+
+.sculpture-wave i:nth-child(2),
+.sculpture-wave i:nth-child(4) {
+  height: 8px;
+}
+
+.sculpture-wave i:nth-child(3) {
+  height: 13px;
+}
+
+.sculpture-session-thought {
+  font: italic 23px/1.2 'Newsreader', Georgia, serif;
+  margin: 0;
+  color: #ece5ce;
+}
+
+.sculpture-session-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #c5c8ac35;
+  padding-top: 12px;
+  color: #b8c6a4;
+}
+
+.sculpture-session-result small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+  color: #9eaf94;
+}
+
+.sculpture-session-result span {
+  font-size: 12px;
+  color: #d2d9c1;
+}
+
+.sculpture-bottom {
+  margin-top: auto;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 25px;
+  padding: 30px 0 24px;
+}
+
+.sculpture-invitation {
+  animation: paper-caption-arrive 1s 0.25s ease both;
+}
+
+.sculpture-invitation > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 42px;
+  border: 1px solid #d3b18b;
+  background: #d3b18b;
+  color: #243a2d;
+  min-height: 52px;
+  padding: 0 23px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sculpture-invitation > button:hover {
+  background: #e3c9a7;
+}
+
+.sculpture-invitation > button > span {
+  font-size: 23px;
+}
+
+.sculpture-invitation > p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #b5c2ad;
+  margin-top: 13px;
+}
+
+.sculpture-inspect {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: none;
+  border: 0;
+  color: #dbd3bb;
+  text-align: left;
+  padding: 5px 0;
+  cursor: pointer;
+}
+
+.sculpture-inspect > span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #c8b99a60;
+  border-radius: 50%;
+  font-size: 21px;
+  font-weight: 300;
+}
+
+.sculpture-inspect small {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #b8c1ab;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.sculpture-inspect strong {
+  font: 400 17px 'Newsreader', Georgia, serif;
+}
+
+.sculpture-inspect:hover > span {
+  background: #c8b99a18;
+}
+
+.sculpture-foot {
+  padding: 16px 0;
+  border-top: 1px solid #c7c9ae30;
+  letter-spacing: 0.12em;
+  line-height: 1.6;
+}
+
+.sculpture-foot a {
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #d4d2be;
+  text-decoration: none;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.sculpture-foot a > span {
+  font-size: 17px;
+  transition: transform 0.25s;
+}
+
+.sculpture-foot a:hover > span {
+  transform: translateY(4px);
+}
+
+.sculpture-hero :focus-visible {
+  outline: 2px solid #d3b18b;
+  outline-offset: 6px;
+}
+
+.sculpture-detail .sculpture-art img {
+  transform: translate(var(--art-x), var(--art-y)) scale(1.28);
+}
+
+.sculpture-detail .sculpture-art-label {
+  opacity: 0;
+}
+
+@media (min-width: 1600px) {
+  .sculpture-art img {
+    object-position: 60% 48%;
+  }
+
+  .sculpture-heading {
+    margin-top: 55px;
+  }
+
+  .sculpture-art-label {
+    bottom: 26%;
+  }
+}
+
+@media (max-width: 900px) {
+  .sculpture-aside {
+    max-width: 180px;
+  }
+
+  .sculpture-art img {
+    object-position: 56% 50%;
+  }
+
+  .sculpture-art-label {
+    right: 7%;
+    bottom: 29%;
+  }
+
+  .sculpture-heading {
+    margin-top: 45px;
+  }
+
+  .sculpture-hero .sculpture-heading h1 {
+    font-size: 80px;
+  }
+
+  .sculpture-hero::before {
+    background:
+      linear-gradient(90deg, #152e2a99, transparent 80%),
+      linear-gradient(0deg, #152e2a 0%, transparent 45%);
+  }
+}
+
+@media (min-width: 561px) {
+  .sculpture-aside {
+    top: auto;
+    bottom: 50%;
+    width: 280px;
+    max-width: 35%;
+    color: #d2d9c8;
+    text-shadow: 0 1px 15px #10271f;
+  }
+}
+
+@media (max-width: 760px) {
+  .bifrost-home .sculpture-hero {
+    height: calc(100svh - 76px);
+  }
+}
+
+@media (max-width: 560px) {
+  .bifrost-home .sculpture-hero {
+    min-height: 690px;
+    padding: 22px 22px 0;
+  }
+
+  .sculpture-topline {
+    font-size: 10px;
+    gap: 10px;
+  }
+
+  .sculpture-topline > span:last-child {
+    display: none;
+  }
+
+  .sculpture-heading {
+    margin-top: 30px;
+  }
+
+  .sculpture-heading > p {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    margin-bottom: 15px;
+  }
+
+  .sculpture-hero .sculpture-heading h1 {
+    font-size: clamp(56px, 17.5vw, 68px);
+  }
+
+  .sculpture-aside {
+    position: static;
+    font-size: 12px !important;
+    line-height: 1.7;
+    max-width: 260px;
+    margin-top: 20px;
+  }
+
+  .sculpture-art {
+    inset: 90px -35% 95px -65%;
+  }
+
+  .sculpture-art img {
+    object-fit: contain;
+    object-position: center 67%;
+    mask-image: linear-gradient(to bottom, transparent, #000 20%, #000 85%, transparent);
+  }
+
+  .sculpture-hero::before {
+    background:
+      linear-gradient(0deg, #152e2a 0%, transparent 30%),
+      linear-gradient(180deg, #152e2a 0%, #152e2a80 32%, transparent 52%);
+  }
+
+  .sculpture-art-label {
+    bottom: 185px;
+    right: 24px;
+  }
+
+  .sculpture-art-label small {
+    font-size: 10px;
+  }
+
+  .sculpture-art-label > span:last-child {
+    font-size: 14px;
+  }
+
+  .sculpture-hero .sculpture-session {
+    bottom: 224px;
+    right: 22px;
+    width: 240px;
+    max-width: 80%;
+    gap: 10px;
+  }
+
+  .sculpture-session-thought {
+    font-size: 19px;
+  }
+
+  .sculpture-session-people > span:not(.sculpture-wave) {
+    width: 21px;
+    height: 21px;
+    font-size: 10px;
+  }
+
+  .sculpture-session-result {
+    padding-top: 9px;
+  }
+
+  .sculpture-session-result span {
+    font-size: 11px;
+  }
+
+  .sculpture-session-result small,
+  .sculpture-session-people > small {
+    font-size: 10px;
+  }
+
+  .sculpture-bottom {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 25px 0 14px;
+  }
+
+  .sculpture-invitation {
+    flex: 1;
+  }
+
+  .sculpture-invitation > button {
+    width: 100%;
+    padding: 8px 12px;
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .sculpture-invitation > p {
+    font-size: 10px;
+    max-width: 200px;
+  }
+
+  .sculpture-inspect {
+    margin-top: 4px;
+  }
+
+  .sculpture-inspect > div {
+    display: none;
+  }
+
+  .sculpture-inspect > span {
+    height: 44px;
+    width: 44px;
+  }
+
+  .sculpture-foot {
+    font-size: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+  }
+
+  .sculpture-foot > span:last-child {
+    display: none;
+  }
+
+  .sculpture-foot a {
+    font-size: 10px;
+    gap: 8px;
+  }
+}
+
+@keyframes paper-light-arrive {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+@keyframes paper-title-arrive {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes paper-caption-arrive {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sculpture-hero .sculpture-art img {
+    transition: none;
+    transform: none;
+  }
+
+  .sculpture-detail .sculpture-art img {
+    transform: scale(1.15);
+  }
+
+  .sculpture-art,
+  .sculpture-heading,
+  .sculpture-topline,
+  .sculpture-invitation {
+    animation: none;
+  }
+}

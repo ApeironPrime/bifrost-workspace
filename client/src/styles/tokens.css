@@ -1,0 +1,184 @@
+/* ==========================================================================
+   DESIGN TOKENS & THEME VARIABLES
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
+
+:root {
+  /* Surface & Background */
+  --bg-page: #f4f1ea;
+  --bg-sidebar: #ece8df;
+  --bg-card: #ffffff;
+  --bg-panel: #f8f6f2;
+  --bg-input: #ffffff;
+  --bg-hover: #e3ddd2;
+  --bg-active: #d8d0c4;
+  --bg-canvas: #ffffff;
+
+  /* Text & Inks */
+  --text-main: #1c2020;
+  --text-muted: #56615a;
+  --text-placeholder: #56615a;
+  --text-subtle: #88928a;
+  --text-eyebrow: #4a5e4e;
+
+  /* Borders & Dividers */
+  --border-subtle: #dad6cc;
+  --border-strong: #c4bdb0;
+  --border-focus: #4a5e4e;
+
+  /* Primary Sage Accent */
+  --primary-sage: #3e5442;
+  --primary-hover: #2e3f32;
+  --primary-active: #23312a;
+  --primary-text: #ffffff;
+  --primary-subtle: #e1ebe3;
+
+  /* Semantic Tones */
+  --danger: #b84a39;
+  --danger-hover: #9c3b2c;
+  --danger-bg: #fcf1ef;
+  --danger-text: #ffffff;
+
+  --success: #38734e;
+  --success-bg: #eaf5ed;
+  --success-text: #235234;
+
+  --info-bg: #eef3f7;
+  --info-text: #2d5573;
+  --info-border: #c8d9e6;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(28, 32, 32, 0.05);
+  --shadow-sm: 0 1px 4px rgba(28, 32, 32, 0.07), 0 0 0 1px rgba(28, 32, 32, 0.03);
+  --shadow-md: 0 4px 16px rgba(28, 32, 32, 0.09);
+  --shadow-lg: 0 12px 32px rgba(28, 32, 32, 0.12);
+
+  /* Layout Constants */
+  --sidebar-width: 256px;
+  --right-panel-width: 272px;
+  --header-height: 52px;
+  --tabs-height: 44px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+[data-theme="dark"] {
+  /* Surface & Background */
+  --bg-page: #131614;
+  --bg-sidebar: #171b18;
+  --bg-card: #1c211e;
+  --bg-panel: #1e2420;
+  --bg-input: #232a25;
+  --bg-hover: #29302b;
+  --bg-active: #323c35;
+  --bg-canvas: #171a18;
+
+  /* Text & Inks */
+  --text-main: #ebe9e4;
+  --text-muted: #9ba49b;
+  --text-placeholder: #a1aca0;
+  --text-subtle: #6f786f;
+  --text-eyebrow: #8fb094;
+
+  /* Borders & Dividers */
+  --border-subtle: #2d3630;
+  --border-strong: #3e4b42;
+  --border-focus: #799e7f;
+
+  /* Primary Sage Accent */
+  --primary-sage: #66876c;
+  --primary-hover: #799e7f;
+  --primary-active: #8db594;
+  --primary-text: #ffffff;
+  --primary-subtle: #1d2b21;
+
+  /* Semantic Tones */
+  --danger: #e06c5a;
+  --danger-hover: #ec7c6b;
+  --danger-bg: #2d1917;
+  --danger-text: #ffffff;
+
+  --success: #4fa66c;
+  --success-bg: #162c1d;
+  --success-text: #a1e2b4;
+
+  --info-bg: #1a2732;
+  --info-text: #8ec3e8;
+  --info-border: #2c4254;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Workspace botanical palette & shell sizing tokens */
+.workspace-edition {
+  --sidebar-width: 244px;
+  --header-height: 72px;
+  --bg-page: #eeece1;
+  --bg-card: #f7f5ec;
+  --bg-panel: #e8e6d9;
+  --bg-input: #fbfaf4;
+  --text-main: #293e32;
+  --text-muted: #53614e;
+  --text-subtle: #5c6955;
+  --text-placeholder: #56615a;
+  --border-subtle: #75826533;
+  --border-strong: #75826566;
+  --border-input: #75826575;
+  --primary-sage: #344f3a;
+  --primary-hover: #233e2c;
+  --focus-bronze: #a98a60;
+  --brand-ink: #456052;
+  --shell-motion: 380ms;
+  --shell-ease: cubic-bezier(.22, 1, .36, 1);
+  font-family: 'DM Sans', 'Noto Sans JP', sans-serif;
+}
+
+[data-theme="dark"] .workspace-edition {
+  --bg-page: #1d3028;
+  --bg-card: #253c31;
+  --bg-panel: #2d4435;
+  --bg-input: #1e3329;
+  --text-main: #e9e4d2;
+  --text-muted: #b3bfa6;
+  --text-subtle: #a2af95;
+  --text-placeholder: #a1aca0;
+  --border-subtle: #c4c9aa2b;
+  --border-strong: #c4c9aa55;
+  --border-input: #c4c9aa5e;
+  --primary-sage: #526f49;
+  --primary-hover: #678257;
+  --focus-bronze: #c4a17b;
+}
+
+.workspace-edition .room-screen {
+  --tabs-height: 54px;
+}
+
+@media (min-width: 1700px) {
+  .workspace-edition {
+    --sidebar-width: 270px;
+    --header-height: 80px;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-edition {
+    --header-height: 64px;
+  }
+}
+
+/* Kept after viewport media queries so focused rooms preserve 60px header height across sizes. */
+.workspace-edition.room-focused {
+  --header-height: 60px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-edition {
+    --shell-motion: 1ms;
+  }
+}

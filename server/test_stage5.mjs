@@ -351,6 +351,381 @@ async function runTests() {
     socketA.disconnect();
     socketB2.disconnect();
 
+    // 16. Kiểm thử Validation UUID & Xử lý lỗi Thành viên (AUD-03)
+    console.log("\n--- Kiểm thử Validation UUID & Xử lý lỗi Thành viên (AUD-03) ---");
+    const aliceId = userA.data.user.id;
+    const bobId = userB.data.user.id;
+    const badUuid = "not-a-valid-uuid";
+
+    const malformedWsGet = await request(`/workspaces/${badUuid}`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Malformed workspaceId trên GET /workspaces/:id trả về 400", malformedWsGet.status === 400);
+
+    const malformedMembersGet = await request(`/workspaces/${badUuid}/members`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Malformed workspaceId trên GET /workspaces/:id/members trả về 400", malformedMembersGet.status === 400);
+
+    const malformedInvite = await request(`/workspaces/${badUuid}/members`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { email: outsiderEmail },
+    });
+    check("Malformed workspaceId trên POST /workspaces/:id/members trả về 400", malformedInvite.status === 400);
+
+    const malformedDeleteWs = await request(`/workspaces/${badUuid}/members/${bobId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Malformed workspaceId trên DELETE member trả về 400", malformedDeleteWs.status === 400);
+
+    const malformedDeleteUser = await request(`/workspaces/${workspaceId}/members/${badUuid}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Malformed userId trên DELETE member trả về 400", malformedDeleteUser.status === 400);
+
+    const malformedRoomsList = await request(`/workspaces/${badUuid}/rooms`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Malformed workspaceId trên GET /workspaces/:id/rooms trả về 400", malformedRoomsList.status === 400);
+
+    const malformedRoomCreate = await request(`/workspaces/${badUuid}/rooms`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { name: "Invalid WS Room" },
+    });
+    check("Malformed workspaceId trên POST /workspaces/:id/rooms trả về 400", malformedRoomCreate.status === 400);
+
+    const malformedRoomGet = await request(`/rooms/${badUuid}`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Malformed roomId trên GET /rooms/:roomId trả về 400", malformedRoomGet.status === 400);
+
+    // Valid workspace & members queries continue working as expected
+    const ownerWsGet = await request(`/workspaces/${workspaceId}`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Owner xem chi tiết workspace hợp lệ trả về 200", ownerWsGet.status === 200);
+
+    const ownerMembersGet = await request(`/workspaces/${workspaceId}/members`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check(
+      "Owner xem danh sách thành viên hợp lệ trả về 200",
+      ownerMembersGet.status === 200 && ownerMembersGet.data.members.length === 2,
+    );
+
+    // Authorization & self-removal checks
+    const nonOwnerDelete = await request(`/workspaces/${workspaceId}/members/${aliceId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenB}` },
+    });
+    check("Member không thể xóa thành viên khác (403)", nonOwnerDelete.status === 403);
+
+    const selfDelete = await request(`/workspaces/${workspaceId}/members/${aliceId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Owner không thể tự xóa chính mình (400)", selfDelete.status === 400);
+
+    const nonexistentMemberDelete = await request(
+      `/workspaces/${workspaceId}/members/00000000-0000-0000-0000-000000000000`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenA}` },
+      },
+    );
+    check(
+      "Xóa thành viên UUID hợp lệ nhưng không tồn tại trả về 404 (P2025)",
+      nonexistentMemberDelete.status === 404,
+    );
+
+    const validDeleteMember = await request(`/workspaces/${workspaceId}/members/${bobId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Owner xóa thành viên tồn tại trả về 204", validDeleteMember.status === 204);
+
+    const removedBobWsGet = await request(`/workspaces/${workspaceId}`, {
+      headers: { Authorization: `Bearer ${tokenB}` },
+    });
+    check("Thành viên sau khi bị xóa không còn truy cập workspace (403)", removedBobWsGet.status === 403);
+
+    const repeatDeleteMember = await request(`/workspaces/${workspaceId}/members/${bobId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    check("Xóa lại thành viên đã bị xóa trả về 404 (P2025)", repeatDeleteMember.status === 404);
+
+    // 17. Kiểm thử Thu hồi Phiên Socket.IO & WebRTC (AUD-05)
+    console.log("\n--- Kiểm thử Thu hồi Phiên Socket.IO & WebRTC (AUD-05) ---");
+    const reinviteBobRes = await request(`/workspaces/${workspaceId}/members`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { email: memberEmail },
+    });
+    check("Mời lại Bob vào Workspace A (201)", reinviteBobRes.status === 201);
+
+    const room2Res = await request(`/workspaces/${workspaceId}/rooms`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { name: "Phòng Họp Phụ Sprint" },
+    });
+    check("Owner tạo Room thứ 2 trong Workspace A (201)", room2Res.status === 201);
+    const room2Id = room2Res.data.room.id;
+
+    const wsBId = wsCharlie.data.workspace.id;
+    const roomBId = roomCharlie.data.room.id;
+    const inviteBobWsB = await request(`/workspaces/${wsBId}/members`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokenC}` },
+      body: { email: memberEmail },
+    });
+    check("Charlie mời Bob vào Workspace B (201)", inviteBobWsB.status === 201);
+
+    async function connectAndJoin(token, targetRoomId) {
+      const sock = ClientSocket(SOCKET_URL, {
+        transports: ["websocket"],
+        auth: { token },
+      });
+      await new Promise((resolve, reject) => {
+        sock.once("connect", resolve);
+        sock.once("connect_error", reject);
+      });
+      const joined = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`Timeout joining room ${targetRoomId}`)), 5000);
+        sock.once("room:joined", (data) => {
+          clearTimeout(timer);
+          resolve(data);
+        });
+        sock.once("room:error", (err) => {
+          clearTimeout(timer);
+          reject(new Error(`Unexpected room:error: ${err?.message}`));
+        });
+        sock.emit("room:join", targetRoomId);
+      });
+      return { sock, joined };
+    }
+
+    const { sock: sAlice1 } = await connectAndJoin(tokenA, roomId);
+    const { sock: sAlice2 } = await connectAndJoin(tokenA, room2Id);
+    const { sock: sBobTab1 } = await connectAndJoin(tokenB, roomId);
+    const { sock: sBobTab2 } = await connectAndJoin(tokenB, roomId);
+    const { sock: sBobRoom2 } = await connectAndJoin(tokenB, room2Id);
+    const { sock: sCharlieB } = await connectAndJoin(tokenC, roomBId);
+    const { sock: sBobWsB } = await connectAndJoin(tokenB, roomBId);
+
+    const aud5Sockets = [sAlice1, sAlice2, sBobTab1, sBobTab2, sBobRoom2, sCharlieB, sBobWsB];
+    try {
+      await new Promise((r) => setTimeout(r, 80));
+
+      // Scenario 5: Failed/unauthorized deletes must NOT evict any socket
+      let spuriousEvictions = 0;
+      const countSpurious = () => { spuriousEvictions++; };
+      sBobTab1.on("room:access-revoked", countSpurious);
+      sBobWsB.on("room:access-revoked", countSpurious);
+
+      const badAuthDel = await request(`/workspaces/${workspaceId}/members/${aliceId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenB}` },
+      });
+      check("Member không thể kích hoạt thu hồi qua DELETE (403)", badAuthDel.status === 403);
+
+      const selfDelAud5 = await request(`/workspaces/${workspaceId}/members/${aliceId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenA}` },
+      });
+      check("Owner tự xóa không kích hoạt thu hồi (400)", selfDelAud5.status === 400);
+
+      const missingDelAud5 = await request(
+        `/workspaces/${workspaceId}/members/00000000-0000-0000-0000-000000000000`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${tokenA}` },
+        },
+      );
+      check("Xóa UUID không tồn tại không kích hoạt thu hồi (404)", missingDelAud5.status === 404);
+
+      await new Promise((r) => setTimeout(r, 80));
+      sBobTab1.off("room:access-revoked", countSpurious);
+      sBobWsB.off("room:access-revoked", countSpurious);
+      check("Không có eviction giả khi DELETE thất bại", spuriousEvictions === 0);
+
+      // Prepare listeners for Scenarios 1, 2, 3, 4 before authorized DELETE
+      const alice1PeerLeftIds = [];
+      let alice1LastPresence = null;
+      sAlice1.on("room:peer-left", ({ peerId }) => alice1PeerLeftIds.push(peerId));
+      sAlice1.on("presence:changed", (p) => { alice1LastPresence = p; });
+
+      const alice2PeerLeftIds = [];
+      let alice2LastPresence = null;
+      sAlice2.on("room:peer-left", ({ peerId }) => alice2PeerLeftIds.push(peerId));
+      sAlice2.on("presence:changed", (p) => { alice2LastPresence = p; });
+
+      let wsBUnexpectedRevoke = false;
+      let wsBUnexpectedPeerLeft = false;
+      sBobWsB.on("room:access-revoked", () => { wsBUnexpectedRevoke = true; });
+      sCharlieB.on("room:peer-left", () => { wsBUnexpectedPeerLeft = true; });
+
+      const waitRevoked = (sock) =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error(`Timeout waiting room:access-revoked on ${sock.id}`)), 5000);
+          sock.once("room:access-revoked", (payload) => {
+            clearTimeout(timer);
+            resolve(payload);
+          });
+        });
+
+      const revokedP1 = waitRevoked(sBobTab1);
+      const revokedP2 = waitRevoked(sBobTab2);
+      const revokedP3 = waitRevoked(sBobRoom2);
+
+      const revokeRes = await request(`/workspaces/${workspaceId}/members/${bobId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenA}` },
+      });
+      check("Owner xóa Bob khỏi Workspace A trả về 204", revokeRes.status === 204);
+
+      const [rev1, rev2, rev3] = await Promise.all([revokedP1, revokedP2, revokedP3]);
+      await new Promise((r) => setTimeout(r, 120));
+
+      // Scenarios 1, 2, 3 assertions
+      check(
+        "Cả 2 tab của Bob trong Room 1 đều nhận room:access-revoked đúng payload",
+        rev1.workspaceId === workspaceId &&
+          rev1.roomId === roomId &&
+          rev1.reason === "workspace_membership_removed" &&
+          rev2.workspaceId === workspaceId &&
+          rev2.roomId === roomId &&
+          rev2.reason === "workspace_membership_removed",
+      );
+      check(
+        "Tab của Bob ở Room 2 cùng Workspace A cũng nhận room:access-revoked",
+        rev3.workspaceId === workspaceId &&
+          rev3.roomId === room2Id &&
+          rev3.reason === "workspace_membership_removed",
+      );
+      check(
+        "Alice ở Room 1 nhận đủ peer-left cho cả 2 tab và presence còn 1 người",
+        alice1PeerLeftIds.includes(sBobTab1.id) &&
+          alice1PeerLeftIds.includes(sBobTab2.id) &&
+          alice1PeerLeftIds.length === 2 &&
+          alice1LastPresence?.peers?.length === 1 &&
+          alice1LastPresence.peers[0].peerId === sAlice1.id,
+      );
+      check(
+        "Alice ở Room 2 nhận peer-left của Bob và presence còn 1 người",
+        alice2PeerLeftIds.includes(sBobRoom2.id) &&
+          alice2PeerLeftIds.length === 1 &&
+          alice2LastPresence?.peers?.length === 1 &&
+          alice2LastPresence.peers[0].peerId === sAlice2.id,
+      );
+      check("Socket bị thu hồi vẫn giữ kết nối tổng quát tới server", sBobTab1.connected && sBobTab2.connected);
+
+      // Scenario 4 assertions: Workspace B unaffected
+      check(
+        "Phiên Workspace B của Bob không bị thu hồi và không rò peer-left",
+        !wsBUnexpectedRevoke && !wsBUnexpectedPeerLeft && sBobWsB.connected,
+      );
+      const wsBOfferDelivered = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Workspace B signaling failed after WS A eviction")), 4000);
+        sCharlieB.once("webrtc:offer", (msg) => {
+          clearTimeout(timer);
+          resolve(msg.peerId === sBobWsB.id);
+        });
+        sBobWsB.emit("webrtc:offer", { targetId: sCharlieB.id, payload: { type: "offer", sdp: "ws-b-ok" } });
+      });
+      check("Signalling WebRTC trong Workspace B vẫn hoạt động bình thường", wsBOfferDelivered);
+
+      // Scenario 6 assertions: Revoked sockets cannot relay WebRTC signaling in Room 1
+      let alice1ReceivedEvictedOffer = false;
+      sAlice1.once("webrtc:offer", () => { alice1ReceivedEvictedOffer = true; });
+      const evictedSignalErr = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Expected room:error on evicted signaling")), 4000);
+        sBobTab1.once("room:error", (err) => {
+          clearTimeout(timer);
+          resolve(err?.message ?? "");
+        });
+        sBobTab1.emit("webrtc:offer", { targetId: sAlice1.id, payload: { type: "offer", sdp: "blocked" } });
+      });
+      await new Promise((r) => setTimeout(r, 80));
+      check(
+        "Socket bị thu hồi bị chặn relay WebRTC signalling tới room cũ",
+        evictedSignalErr.includes("khác room") && !alice1ReceivedEvictedOffer,
+      );
+
+      let bobTab1ReceivedReverseOffer = false;
+      sBobTab1.once("webrtc:offer", () => { bobTab1ReceivedReverseOffer = true; });
+      const reverseSignalErr = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Expected room:error on signaling to evicted peer")), 4000);
+        sAlice1.once("room:error", (err) => {
+          clearTimeout(timer);
+          resolve(err?.message ?? "");
+        });
+        sAlice1.emit("webrtc:offer", { targetId: sBobTab1.id, payload: { type: "offer", sdp: "blocked-reverse" } });
+      });
+      await new Promise((r) => setTimeout(r, 80));
+      check(
+        "Peer còn lại cũng bị chặn gửi signalling tới peer đã bị thu hồi",
+        reverseSignalErr.includes("khác room") && !bobTab1ReceivedReverseOffer,
+      );
+
+      // Scenario 1 & 7 assertions: Rejoin rejected on both existing socket and fresh reconnected socket
+      const existingSocketRejoinErr = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Expected room:error on rejoin from existing socket")), 4000);
+        sBobTab1.once("room:error", (err) => {
+          clearTimeout(timer);
+          resolve(err?.message ?? "");
+        });
+        sBobTab1.emit("room:join", roomId);
+      });
+      check(
+        "Socket cũ bị từ chối khi thử room:join lại vào phòng đã bị thu hồi",
+        existingSocketRejoinErr.includes("không thuộc workspace"),
+      );
+
+      sBobTab1.disconnect();
+      const sBobReconnect = ClientSocket(SOCKET_URL, {
+        transports: ["websocket"],
+        auth: { token: tokenB },
+      });
+      aud5Sockets.push(sBobReconnect);
+      await new Promise((r) => sBobReconnect.on("connect", r));
+
+      const reconnectRejoinErr = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Expected room:error on reconnect rejoin")), 4000);
+        sBobReconnect.once("room:error", (err) => {
+          clearTimeout(timer);
+          resolve(err?.message ?? "");
+        });
+        sBobReconnect.once("room:joined", () => {
+          clearTimeout(timer);
+          reject(new Error("Removed member unexpectedly rejoined after reconnect"));
+        });
+        sBobReconnect.emit("room:join", roomId);
+      });
+      check(
+        "Kết nối mới (reconnect) bị từ chối khi room:join vào Workspace A",
+        reconnectRejoinErr.includes("không thuộc workspace"),
+      );
+
+      const reconnectWsBJoined = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Expected reconnect join to succeed in Workspace B")), 4000);
+        sBobReconnect.once("room:joined", (data) => {
+          clearTimeout(timer);
+          resolve(data.roomId === roomBId);
+        });
+        sBobReconnect.emit("room:join", roomBId);
+      });
+      check("Kết nối mới vẫn vào được Workspace B hợp lệ", reconnectWsBJoined);
+    } finally {
+      for (const s of aud5Sockets) {
+        if (s.connected) s.disconnect();
+      }
+    }
+
     console.log("\n==========================================");
     console.log(" TẤT CẢ CÁC BÀI KIỂM THỬ ĐỀU THÀNH CÔNG! ");
     console.log("==========================================");

@@ -1,0 +1,341 @@
+/* ==========================================================================
+   MOTION, VIEW TRANSITIONS & REDUCED MOTION
+   ========================================================================== */
+
+.motion-presence {
+  display: contents;
+}
+
+.motion-presence > .modal-overlay {
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.motion-presence > .modal-overlay > .modal-card {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: transform 320ms cubic-bezier(.22, 1, .36, 1), opacity 180ms ease;
+}
+
+.motion-presence[data-exiting] > .modal-overlay {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.motion-presence[data-exiting] > .modal-overlay > .modal-card {
+  opacity: 0;
+  transform: translateY(6px) scale(.99);
+  transition-duration: 180ms;
+}
+
+@starting-style {
+  .motion-presence > .modal-overlay {
+    opacity: 0;
+  }
+
+  .motion-presence > .modal-overlay > .modal-card {
+    opacity: 0;
+    transform: translateY(12px) scale(.985);
+  }
+}
+
+.motion-presence > .panel-backdrop {
+  opacity: 1;
+  transition: opacity 240ms ease;
+}
+
+.motion-presence[data-exiting] > .panel-backdrop {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@starting-style {
+  .motion-presence > .panel-backdrop {
+    opacity: 0;
+  }
+}
+
+.workspace-edition.room-focused .motion-presence > .right-panel {
+  opacity: 1;
+  transform: translateX(0);
+  margin-right: 0;
+  transition:
+    margin-right 340ms cubic-bezier(.22, 1, .36, 1),
+    transform 340ms cubic-bezier(.22, 1, .36, 1),
+    opacity 220ms ease;
+}
+
+@media (min-width: 1025px) {
+  .workspace-edition.room-focused .motion-presence > .right-panel {
+    width: 280px;
+    min-width: 280px;
+  }
+
+  .workspace-edition.room-focused .motion-presence[data-exiting] > .right-panel {
+    margin-right: -280px;
+    opacity: 0;
+    transform: translateX(12px);
+  }
+
+  @starting-style {
+    .workspace-edition.room-focused .motion-presence > .right-panel {
+      margin-right: -280px;
+      opacity: 0;
+      transform: translateX(12px);
+    }
+  }
+}
+
+@media (max-width: 1024px) {
+  .workspace-edition.room-focused .motion-presence[data-exiting] > .right-panel {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  @starting-style {
+    .workspace-edition.room-focused .motion-presence > .right-panel {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Room Tabs & Snapshot / Slide View Transitions
+   -------------------------------------------------------------------------- */
+:root:has(.workspace-edition),
+:root:has(.bifrost-auth) {
+  view-transition-name: none;
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
+.workspace-edition .room-tabs-viewport {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  isolation: isolate;
+  background: var(--bg-page);
+  view-transition-name: bifrost-room-tabs;
+}
+
+.workspace-edition .tab-pane {
+  grid-area: 1 / 1;
+  opacity: 1;
+  translate: none;
+  visibility: visible;
+  background: var(--bg-page);
+  transition: opacity 240ms linear;
+}
+
+.workspace-edition .tab-pane.active {
+  z-index: 1;
+  animation: none;
+}
+
+.workspace-edition .tab-pane.hidden {
+  display: flex !important;
+  z-index: 0;
+  opacity: 0;
+  translate: none;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0s 260ms, visibility 0s 260ms;
+}
+
+.workspace-edition .room-tabs-viewport[data-snapshot-transition] > .tab-pane {
+  transition: none;
+}
+
+.workspace-edition .room-tab-btn {
+  transition: color 160ms ease, background-color 160ms ease, border-color 220ms ease;
+}
+
+.workspace-edition .room-tabs-nav {
+  position: relative;
+}
+
+.workspace-edition .room-tabs-nav .room-tab-btn,
+.workspace-edition .room-tabs-nav .room-tab-btn[aria-selected="true"] {
+  border-bottom-color: transparent;
+}
+
+.room-tab-indicator {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  pointer-events: none;
+  width: var(--tab-indicator-width, 0px);
+  transform: translateX(var(--tab-indicator-x, 0px));
+  background: var(--primary-sage);
+  transition:
+    transform 360ms cubic-bezier(.4, 0, .2, 1),
+    width 360ms cubic-bezier(.4, 0, .2, 1);
+}
+
+::view-transition-group(bifrost-room-tabs) {
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(.4, 0, .2, 1);
+}
+
+::view-transition-image-pair(bifrost-room-tabs) {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+::view-transition-old(bifrost-room-tabs),
+::view-transition-new(bifrost-room-tabs) {
+  opacity: 1;
+  mix-blend-mode: normal;
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(.4, 0, .2, 1);
+  animation-fill-mode: both;
+  height: 100%;
+  width: 100%;
+  object-fit: fill;
+}
+
+:root[data-room-slide="forward"]::view-transition-old(bifrost-room-tabs) {
+  animation-name: room-page-out-left;
+}
+
+:root[data-room-slide="forward"]::view-transition-new(bifrost-room-tabs) {
+  animation-name: room-page-in-right;
+}
+
+:root[data-room-slide="backward"]::view-transition-old(bifrost-room-tabs) {
+  animation-name: room-page-out-right;
+}
+
+:root[data-room-slide="backward"]::view-transition-new(bifrost-room-tabs) {
+  animation-name: room-page-in-left;
+}
+
+@keyframes room-page-out-left {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(calc(-100% + 1px));
+    opacity: 1;
+  }
+}
+
+@keyframes room-page-in-right {
+  from {
+    transform: translateX(calc(100% - 1px));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes room-page-out-right {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(calc(100% - 1px));
+    opacity: 1;
+  }
+}
+
+@keyframes room-page-in-left {
+  from {
+    transform: translateX(calc(-100% + 1px));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.workspace-edition .room-tabs-viewport[data-slide-direction] > .tab-pane {
+  transition: none;
+}
+
+.workspace-edition .room-tabs-viewport[data-slide-direction] > .tab-pane.active,
+.workspace-edition .room-tabs-viewport[data-slide-direction] > .tab-pane.hidden[data-slide-leaving] {
+  opacity: 1;
+  visibility: visible;
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(.4, 0, .2, 1);
+  animation-fill-mode: both;
+}
+
+.workspace-edition .room-tabs-viewport[data-slide-direction="forward"] > .tab-pane.active {
+  animation-name: room-page-in-right;
+}
+
+.workspace-edition .room-tabs-viewport[data-slide-direction="forward"] > .tab-pane.hidden[data-slide-leaving] {
+  animation-name: room-page-out-left;
+}
+
+.workspace-edition .room-tabs-viewport[data-slide-direction="backward"] > .tab-pane.active {
+  animation-name: room-page-in-left;
+}
+
+.workspace-edition .room-tabs-viewport[data-slide-direction="backward"] > .tab-pane.hidden[data-slide-leaving] {
+  animation-name: room-page-out-right;
+}
+
+/* Auth entry snapshot transition */
+.bifrost-auth .auth-entry {
+  view-transition-name: bifrost-auth-card;
+}
+
+.bifrost-auth .auth-entry[data-snapshot-transition] {
+  transition: none;
+}
+
+::view-transition-group(bifrost-auth-card) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+}
+
+::view-transition-image-pair(bifrost-auth-card) {
+  isolation: isolate;
+}
+
+::view-transition-old(bifrost-auth-card),
+::view-transition-new(bifrost-auth-card) {
+  mix-blend-mode: plus-lighter;
+  animation-duration: 320ms;
+  animation-timing-function: linear;
+  height: 100%;
+  width: 100%;
+  object-fit: fill;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-edition * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 1ms !important;
+  }
+
+  .motion-presence > .modal-overlay,
+  .motion-presence > .modal-overlay > .modal-card,
+  .motion-presence > .panel-backdrop {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .workspace-edition .tab-pane {
+    translate: none;
+  }
+}

@@ -1,0 +1,38 @@
+.account-trigger{width:100%;min-width:0;min-height:48px;display:flex;align-items:center;gap:10px;padding:7px 8px;border:1px solid transparent;border-radius:8px;background:none;color:#b8c7ab;text-align:left;cursor:pointer;font-family:'DM Sans','Noto Sans JP',sans-serif;transition:background-color 150ms ease,border-color 150ms ease}
+.account-trigger:hover,.account-trigger[aria-expanded=true]{background:#c0c9a416;border-color:#aebd9d2e}
+.account-trigger-avatar,.account-menu-avatar{width:34px;height:34px;flex-shrink:0;background:#4c6147;color:#f4eedc;border:1px solid #c2d0b030;display:grid;place-items:center;border-radius:50%;overflow:hidden;font-size:12px;font-weight:500;letter-spacing:.02em}
+.account-trigger-avatar img,.account-menu-avatar img{width:100%;height:100%;object-fit:cover}
+.account-trigger-text{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.account-trigger-text strong{font-size:12.5px;font-weight:500;line-height:1.35;color:#e7ead7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-trigger-text small{font-size:11px;line-height:1.3;color:#a5b89a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-trigger>svg{flex-shrink:0;opacity:.75}
+.account-popover{position:fixed;inset:auto;margin:0;width:276px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;background:#f8f6ee;color:#293e32;border:1px solid #75826544;border-radius:12px;padding:9px;box-shadow:0 16px 48px #1029202e,0 2px 8px #1029200d;font-family:'DM Sans','Noto Sans JP',sans-serif}
+.account-menu-identity{display:flex;align-items:center;gap:11px;padding:10px 10px 14px;border-bottom:1px solid #75826530;margin-bottom:6px;min-width:0}
+.account-menu-identity-copy{min-width:0;flex:1}
+.account-menu-identity strong,.account-menu-identity small{display:block;overflow-wrap:anywhere}
+.account-menu-identity strong{font-size:14px;font-weight:500;line-height:1.4}
+.account-menu-identity small{font-size:11.5px;line-height:1.45;color:#67735f;margin-top:3px}
+.account-popover>button{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:10px 11px;min-height:42px;color:inherit;border-radius:7px;font:13px 'DM Sans','Noto Sans JP',sans-serif;cursor:pointer;text-align:left}
+.account-popover>button:hover{background:#75826512}
+.account-popover>button>span:first-of-type{flex:1}
+.account-popover>button>small{font-size:11px;color:#67735f}
+.account-popover>p{font-size:10px;font-weight:500;letter-spacing:.08em;color:#67735f;padding:0 11px;margin:12px 0 4px}
+.account-menu-divider{height:1px;background:#75826530;margin:8px 10px}
+.account-popover>.account-logout{color:#9b4e3b}
+.account-popover>.account-logout:hover{background:#b84a3912}
+.account-theme-switch{display:block;width:28px;height:16px;border:1px solid #75826555;border-radius:20px;background:#d9ddcf;padding:2px;box-sizing:border-box;flex-shrink:0}
+.account-theme-switch i{display:block;height:10px;width:10px;border-radius:50%;background:#fff;transition:transform .2s}
+.account-theme-switch.on{background:#53664b;border-color:#53664b}
+.account-theme-switch.on i{transform:translateX(12px)}
+.account-trigger:focus-visible{outline:2px solid #c4a17b;outline-offset:2px}
+.account-popover :focus-visible{outline:2px solid #a18460;outline-offset:2px}
+[data-theme=dark] .account-popover{background:#253c31;color:#e9e4d2;border-color:#c4c9aa40}
+[data-theme=dark] .account-popover>button:hover{background:#c4c9aa14}
+[data-theme=dark] .account-popover>.account-logout{color:#ebb09e}
+[data-theme=dark] .account-popover>.account-logout:hover{background:#e06c5a1f}
+[data-theme=dark] .account-popover small,[data-theme=dark] .account-popover>p{color:#b3bfa6}
+[data-theme="dark"] .account-theme-switch{background:#1b2d25;border-color:#c4c9aa52}
+[data-theme="dark"] .account-theme-switch.on{background:#87a878;border-color:#9ec08e}
+[data-theme="dark"] .account-theme-switch.on i{background:#182b22}
+@media(prefers-reduced-motion:no-preference){.account-popover:popover-open{animation:account-open .15s ease-out}@keyframes account-open{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}}
+@media(prefers-reduced-motion:reduce){.account-trigger,.account-theme-switch i{transition:none}}

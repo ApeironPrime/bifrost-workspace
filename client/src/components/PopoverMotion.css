@@ -1,0 +1,18 @@
+/* Loaded at the public entry point, not only with the lazy workspace bundle.
+   Native discrete transitions retain the top layer through outside-click / Escape
+   dismissal. Specificity also prevents later lazy CSS from replaying old keyframes. */
+@supports (transition-behavior:allow-discrete) {
+  :root :is(.select-menu-panel,.account-popover,.avatar-popover) {
+    opacity:0; translate:0 5px; scale:.985; transform-origin:50% 15%; pointer-events:none;
+    transition:opacity 160ms ease,translate 220ms cubic-bezier(.22,1,.36,1),scale 220ms cubic-bezier(.22,1,.36,1),display 220ms allow-discrete,overlay 220ms allow-discrete;
+  }
+  :root :is(.select-menu-panel,.account-popover,.avatar-popover):popover-open {
+    animation:none; opacity:1; translate:0 0; scale:1; pointer-events:auto;
+  }
+  @starting-style {
+    :root :is(.select-menu-panel,.account-popover,.avatar-popover):popover-open { opacity:0; translate:0 5px; scale:.985; }
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  :root :is(.select-menu-panel,.account-popover,.avatar-popover) { transition:none!important; animation:none!important; }
+}

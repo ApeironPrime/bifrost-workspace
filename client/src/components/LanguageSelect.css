@@ -1,0 +1,176 @@
+.language-select {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: none;
+}
+
+.language-select .language-select-menu {
+  flex: none;
+}
+
+.language-select .select-menu-trigger {
+  min-height: 40px;
+  padding: 7px 10px;
+  gap: 7px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.language-trigger-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.language-trigger-globe {
+  flex-shrink: 0;
+  opacity: 0.82;
+}
+
+.language-select-menu .select-menu-panel { border-radius:10px; padding:6px; }
+.language-select-menu .select-menu-option { min-height:42px; padding:10px 12px; line-height:20px; gap:12px; }
+.language-select-menu .select-menu-option-name { line-height:20px; font-weight:500; }
+.language-select .select-menu-trigger { line-height:20px; }
+
+.language-trigger-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.language-trigger-code {
+  display: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.language-select[data-compact="true"] .language-trigger-full {
+  display: none;
+}
+
+.language-select[data-compact="true"] .language-trigger-code {
+  display: inline;
+}
+
+.language-select[data-compact="true"] .select-menu-trigger {
+  padding-inline: 9px;
+  gap: 5px;
+}
+
+/* Homepage header surface */
+.bifrost-home .language-select .select-menu-trigger {
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid var(--border, #bdc8ad50);
+  background: var(--surface2, #233d32);
+  color: var(--text, #e9e6d8);
+}
+
+.bifrost-home .language-select .select-menu-trigger:hover:not(:disabled),
+.bifrost-home .language-select .select-menu-trigger[aria-expanded="true"] {
+  border-color: #d3b18b99;
+  background: #2a473a;
+}
+
+.bifrost-home .language-select .select-menu-trigger:focus-visible {
+  outline: 2px solid #d3b18b;
+  outline-offset: 3px;
+}
+
+/* Auth masthead surface */
+.bifrost-auth .auth-masthead .language-select .select-menu-trigger {
+  height: 44px;
+  min-height: 44px;
+  padding: 7px 11px;
+  border: 1px solid #b7c3a645;
+  border-radius: 7px;
+  background: #203c3480;
+  color: #e9e5d5;
+}
+
+.bifrost-auth .auth-masthead .language-select .select-menu-trigger:hover:not(:disabled),
+.bifrost-auth .auth-masthead .language-select .select-menu-trigger[aria-expanded="true"] {
+  border-color: #d5b48599;
+  background: #26463d;
+  color: #f4efe0;
+}
+
+/* AccountMenu popover row surface */
+.language-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 4px 7px 4px 11px;
+  box-sizing: border-box;
+  border-radius: 7px;
+}
+
+.language-row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.language-row-label > svg {
+  flex-shrink: 0;
+  opacity: 0.82;
+}
+
+.language-select-row .language-select-menu {
+  flex: 0 1 auto;
+}
+
+.language-select-row .select-menu-trigger {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid #7582654d;
+  background: #fbfaf4;
+  color: #293e32;
+  font-size: 12.5px;
+}
+
+.language-select-row .select-menu-trigger:hover:not(:disabled),
+.language-select-row .select-menu-trigger[aria-expanded="true"] {
+  border-color: #a18460;
+  background: #f2efe3;
+}
+
+[data-theme="dark"] .language-select-row .select-menu-trigger {
+  border-color: #c4c9aa40;
+  background: #1d3028;
+  color: #e9e4d2;
+}
+
+[data-theme="dark"] .language-select-row .select-menu-trigger:hover:not(:disabled),
+[data-theme="dark"] .language-select-row .select-menu-trigger[aria-expanded="true"] {
+  border-color: #c4a17b;
+  background: #2d4538;
+}
+
+@media (max-width: 760px) {
+  .bifrost-auth .auth-masthead .language-select .language-trigger-full {
+    display: none;
+  }
+  .bifrost-auth .auth-masthead .language-select .language-trigger-code {
+    display: inline;
+  }
+  .bifrost-auth .auth-masthead .language-select .select-menu-trigger {
+    padding-inline: 9px;
+    gap: 5px;
+  }
+}
