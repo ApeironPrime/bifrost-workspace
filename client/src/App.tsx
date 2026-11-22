@@ -735,7 +735,7 @@ function App() {
       const response = await fetchAppApi(apiUrl("/auth/me"), {
         method: "PATCH",
         headers: authHeaders(),
-        body: JSON.stringify({ name: profileName, ...(isDevMockSession(token) ? { avatarDataUrl: profileAvatar } : {}) }),
+        body: JSON.stringify({ name: profileName, avatarDataUrl: profileAvatar }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.message);
@@ -2003,7 +2003,7 @@ function App() {
   const hideRailTip = useCallback(() => railTipStore.set(null), [railTipStore]);
   const closeProfileForm = () => {
     if (profileSaving || profileImageBusy) return;
-    const avatarDirty = isDevMockSession(token) && profileAvatar !== (user?.profile?.avatarDataUrl ?? null);
+    const avatarDirty = profileAvatar !== (user?.profile?.avatarDataUrl ?? null);
     if (profileName !== user?.name || avatarDirty) setDiscardForm('profile');
     else setShowProfileModal(false);
   };
@@ -2932,7 +2932,7 @@ function App() {
                                 <small>{room.host?.name || t('dashboard.unassignedLabel')}</small>
                               </div>
                               <div className="workspace-room-row-actions">
-                                {isDevMockSession(token) && (selectedWorkspace?.role === 'OWNER' || isHost) && (
+                                {(selectedWorkspace?.role === 'OWNER' || isHost) && (
                                   <button
                                     type="button"
                                     className="btn-icon room-manage-btn"
@@ -3193,7 +3193,10 @@ function App() {
                     aria-label={t("rightPanel.title")}
                   >
                     <div className="right-panel-header">
-                      <h3>{t("rightPanel.title")}</h3>
+                      <div className="right-panel-title-group">
+                        <span className="right-panel-coord" aria-hidden="true">B / 001</span>
+                        <h3>{t("rightPanel.title")}</h3>
+                      </div>
                       <button
                         type="button"
                         className="btn-icon right-panel-close-btn"
@@ -3208,7 +3211,7 @@ function App() {
                     <div className="right-panel-body">
                       {/* Room info section */}
                       <div className="right-panel-section">
-                        <p className="eyebrow">{t("rightPanel.roomDetails")}</p>
+                        <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">01 /</span>{t("rightPanel.roomDetails")}</p>
                         <div className="right-panel-info-row">
                           <span>{t("rightPanel.host")}:</span>
                           <strong>{withCurrentUserHost(currentRoom, user).host?.name || t('dashboard.unassignedLabel')}</strong>
@@ -3228,8 +3231,7 @@ function App() {
                           {copiedRoomId ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
                           <span>{copiedRoomId ? t("rightPanel.copied") : t("rightPanel.copyRoomId")}</span>
                         </button>
-                        {isDevMockSession(token) &&
-                          (selectedWorkspace?.role === "OWNER" ||
+                        {(selectedWorkspace?.role === "OWNER" ||
                             currentRoom.access === "HOST" ||
                             (currentRoom.hostId !== null && currentRoom.hostId === user.id)) && (
                             <button
@@ -3245,7 +3247,7 @@ function App() {
 
                       {/* Online Members section */}
                       <div className="right-panel-section">
-                        <p className="eyebrow">{t("rightPanel.onlineMembers", { count: onlinePeers.length })}</p>
+                        <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">02 /</span>{t("rightPanel.onlineMembers", { count: onlinePeers.length })}</p>
                         <p className="right-panel-presence-scope">
                           {isDevMockSession(token)
                             ? t("rightPanel.localPreviewBadge")
@@ -3296,7 +3298,7 @@ function App() {
 
                       {/* Connection Diagnostics */}
                       <div className="right-panel-section">
-                        <p className="eyebrow">{t("rightPanel.connection")}</p>
+                        <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">03 /</span>{t("rightPanel.connection")}</p>
                         <div
                           className={`p2p-status-pill tone-${
                             peersCount > 0
@@ -3435,7 +3437,6 @@ function App() {
                 color={getAvatarTone(user.id)}
                 lang={lang}
                 disabled={profileSaving}
-                unsupported={!isDevMockSession(token)}
                 onChange={setProfileAvatar}
                 onBusy={setProfileImageBusy}
               />

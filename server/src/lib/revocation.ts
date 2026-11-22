@@ -99,3 +99,72 @@ export async function revokeWorkspaceMemberSessions(
 
   return { evictedRoomIds, evictedSocketIds };
 }
+
+export async function revokeRoomSessions(
+  ioServer: Server,
+  {
+    workspaceId,
+    roomId,
+    userId,
+    reason = ROOM_ACCESS_REVOKED_REASON,
+    message = "Quyền truy cập phòng này đã bị thu hồi.",
+  }: {
+    workspaceId: string;
+    roomId: string;
+    userId?: string;
+    reason?: string;
+    message?: string;
+  },
+): Promise<string[]> {
+  const socketRoomKey = `room:${roomId}`;
+  const socketsInRoom = await ioServer.in(socketRoomKey).fetchSockets();
+  const targetSockets = userId
+    ? socketsInRoom.filter((socket) => socket.data?.user?.id === userId)
+    : socketsInRoom;
+
+  if (targetSockets.length === 0) return [];
+
+  const revokedIdSet = new Set(targetSockets.map((socket) => socket.id));
+  await Promise.all(targetSockets.map((socket) => socket.leave(socketRoomKey)));
+
+  for (const revokedSocket of targetSockets) {
+    revokedSocket.emit(ROOM_ACCESS_REVOKED_EVENT, {
+      workspaceId,
+      roomId,
+      reason,
+      message,
+    });
+  }
+
+  if (userId) {
+    const remainingPresence = await getRoomPresence(ioServer, socketRoomKey, revokedIdSet);
+    for (const revokedSocket of targetSockets) {
+      ioServer.to(socketRoomKey).emit("room:peer-left", { peerId: revokedSocket.id });
+    }
+    ioServer.to(socketRoomKey).emit("presence:changed", {
+      roomId,
+      peers: remainingPresence,
+    });
+  }
+
+  return [...revokedIdSet];
+}
+
+export async function getWorkspaceLivePresence(
+  ioServer: Server,
+  db: PrismaClient,
+  workspaceId: string,
+): Promise<Map<string, { status: "online" | "offline"; currentRoomId: string | null }>> {
+  const rooms = await db.room.findMany({
+    where: { workspaceId },
+    select: { id: true },
+  });
+  const presenceMap = new Map<string, { status: "online" | "offline"; currentRoomId: string | null }>();
+  for (const { id: roomId } of rooms) {
+    const peers = await getRoomPresence(ioServer, `room:${roomId}`);
+    for (const peer of peers) {
+      presenceMap.set(peer.userId, { status: "online", currentRoomId: roomId });
+    }
+  }
+  return presenceMap;
+}

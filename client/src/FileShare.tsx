@@ -703,7 +703,7 @@ export const FileShare = memo(function FileShare({
     <section className="file-share-panel" aria-label={t("fileShare.title")}>
       <div className="file-share-header">
         <div>
-          <p className="eyebrow">{t("fileShare.title")}</p>
+          <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">05 /</span>{t("fileShare.title")}</p>
           <h2>{readOnly ? t("tabs.files") : t("fileShare.dropOrSelect")}</h2>
           <p className="file-limit-hint">{readOnly ? t("room.readonlyActionBlocked") : t("fileShare.fileHelp")}</p>
         </div>

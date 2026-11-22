@@ -12,6 +12,13 @@ enum WorkspaceRole {
   MEMBER
 }
 
+enum RoomAccessRole {
+  HOST
+  MODERATOR
+  MEMBER
+  VIEWER
+}
+
 model User {
   id                   String            @id @default(uuid()) @db.Uuid
   name                 String            @db.VarChar(100)
@@ -19,23 +26,38 @@ model User {
   passwordHash         String            @map("password_hash")
   createdAt            DateTime          @default(now()) @map("created_at")
   updatedAt            DateTime          @updatedAt @map("updated_at")
+  profile              UserProfile?
   ownedWorkspaces      Workspace[]       @relation("WorkspaceOwner")
   workspaceMemberships WorkspaceMember[]
   hostedRooms          Room[]            @relation("HostedRooms")
+  createdRooms         Room[]            @relation("CreatedRooms")
+  roomMemberships      RoomMember[]
 
   @@map("users")
 }
 
+model UserProfile {
+  userId        String   @id @map("user_id") @db.Uuid
+  avatarDataUrl String?  @map("avatar_data_url") @db.Text
+  completedAt   DateTime @default(now()) @map("completed_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
 model Workspace {
-  id        String            @id @default(uuid()) @db.Uuid
-  name      String            @db.VarChar(120)
-  slug      String            @unique @db.VarChar(140)
-  ownerId   String            @map("owner_id") @db.Uuid
-  createdAt DateTime          @default(now()) @map("created_at")
-  updatedAt DateTime          @updatedAt @map("updated_at")
-  owner     User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members   WorkspaceMember[]
-  rooms     Room[]
+  id          String            @id @default(uuid()) @db.Uuid
+  name        String            @db.VarChar(120)
+  slug        String            @unique @db.VarChar(140)
+  ownerId     String            @map("owner_id") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  owner       User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     WorkspaceMember[]
+  rooms       Room[]
+  roomMembers RoomMember[]
+  roomRoles   RoomLabel[]
 
   @@map("workspaces")
 }
@@ -54,18 +76,54 @@ model WorkspaceMember {
 }
 
 model Room {
-  id          String    @id @default(uuid()) @db.Uuid
-  name        String    @db.VarChar(120)
-  description String?   @db.VarChar(255)
-  workspaceId String    @map("workspace_id") @db.Uuid
-  hostId      String    @map("host_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  host        User      @relation("HostedRooms", fields: [hostId], references: [id], onDelete: Cascade)
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(120)
+  description String?      @db.VarChar(255)
+  workspaceId String       @map("workspace_id") @db.Uuid
+  hostId      String?      @map("host_id") @db.Uuid
+  createdById String?      @map("created_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  host        User?        @relation("HostedRooms", fields: [hostId], references: [id], onDelete: SetNull)
+  createdBy   User?        @relation("CreatedRooms", fields: [createdById], references: [id], onDelete: SetNull)
+  members     RoomMember[]
+  roles       RoomLabel[]
 
   @@index([workspaceId])
   @@index([hostId])
   @@map("rooms")
 }
 
+model RoomMember {
+  workspaceId String         @map("workspace_id") @db.Uuid
+  roomId      String         @map("room_id") @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  role        RoomAccessRole @default(MEMBER)
+  labelIds    String[]       @default([]) @map("label_ids")
+  assignedAt  DateTime       @default(now()) @map("assigned_at")
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  room        Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+  @@map("room_members")
+}
+
+model RoomLabel {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  roomId      String    @map("room_id") @db.Uuid
+  name        String    @db.VarChar(32)
+  color       String    @db.VarChar(16)
+  priority    Int       @default(100)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, roomId])
+  @@map("room_roles")
+}

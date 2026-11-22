@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { WorkspaceRole } from "../generated/prisma/enums.js";
 import { prisma } from "../lib/prisma.js";
 import { validateUuidParams } from "../lib/validation.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -44,7 +45,28 @@ export function createRoomRouter(db: PrismaClient = prisma) {
         return;
       }
 
-      response.json({ room });
+      const roomAssignment = await db.roomMember.findUnique({
+        where: {
+          workspaceId_roomId_userId: {
+            workspaceId: room.workspaceId,
+            roomId: room.id,
+            userId: request.user!.id,
+          },
+        },
+      });
+
+      const access =
+        membership.role === WorkspaceRole.OWNER
+          ? "OWNER"
+          : (roomAssignment?.role ?? (room.hostId === request.user!.id ? "HOST" : null));
+
+      response.json({
+        room: {
+          ...room,
+          access,
+          createdById: (room as { createdById?: string | null }).createdById ?? room.hostId,
+        },
+      });
     } catch (error) {
       next(error);
     }

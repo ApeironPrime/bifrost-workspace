@@ -78,7 +78,13 @@ const ChatMessageList = memo(function ChatMessageList({
 }: ChatMessageListProps) {
   return (
     <>
-      <h2 className="room-pane-title">{messagesHeading}</h2>
+      <div className="chat-editorial-header">
+        <div className="chat-editorial-title">
+          <span className="eyebrow-num" aria-hidden="true">03 /</span>
+          <h2 className="room-pane-title">{messagesHeading}</h2>
+        </div>
+        <span className="chat-editorial-proto" aria-hidden="true">WebRTC · P2P</span>
+      </div>
       <div
         className="chat-messages-container"
         ref={chatLogRef}

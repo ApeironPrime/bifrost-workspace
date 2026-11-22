@@ -282,11 +282,51 @@
 }
 
 .workspace-edition .right-panel-header {
+  position: relative;
   align-items: center;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   justify-content: space-between;
-  padding: 20px;
+  padding: 22px 20px 18px;
+}
+
+.workspace-edition .right-panel-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20px;
+  width: 34px;
+  height: 2px;
+  background: #b4926c;
+  pointer-events: none;
+}
+
+.right-panel-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.right-panel-coord {
+  font: italic 11px/1 'Newsreader', Georgia, serif;
+  letter-spacing: 0.14em;
+  color: #8b6d4b;
+}
+
+[data-theme="dark"] .right-panel-coord {
+  color: #cfaf89;
+}
+
+.eyebrow-num {
+  font: italic 13px/1 'Newsreader', Georgia, serif;
+  color: #8b6d4b;
+  margin-right: 5px;
+  letter-spacing: 0.04em;
+}
+
+[data-theme="dark"] .eyebrow-num {
+  color: #cfaf89;
 }
 
 .right-panel-header h3 {
@@ -435,11 +475,13 @@
 .workspace-edition .peer-empty-note {
   margin: 4px 0 0;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.65;
   color: var(--text-muted);
-  padding: 10px 12px;
-  border: 1px dashed var(--border-subtle);
-  border-radius: 8px;
+  padding: 12px 14px;
+  border: 1px dashed #b4926c66;
+  border-left: 2.5px solid #b4926c88;
+  border-radius: 14px 4px 4px 4px;
+  background: var(--bg-card);
 }
 
 .workspace-edition .right-panel-directory-btn {
@@ -1951,12 +1993,45 @@
   scroll-padding-bottom: 16px;
 }
 
+.chat-editorial-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
+
+.chat-editorial-title {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-editorial-title .room-pane-title {
+  margin-bottom: 0;
+}
+
+.chat-editorial-proto {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
 .workspace-edition .chat-messages-container > .empty-state {
   margin: auto;
-  width: min(100%, 360px);
-  padding: 35px 25px;
-  font-size: 13px;
-  line-height: 1.9;
+  width: min(100%, 400px);
+  padding: 32px 26px;
+  font-size: 13.5px;
+  line-height: 1.85;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-left: 2.5px solid #b4926c88;
+  border-radius: 22px 4px 4px 4px;
 }
 
 .workspace-edition.room-focused .chat-bubble {

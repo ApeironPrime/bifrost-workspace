@@ -270,3 +270,88 @@ test("valid existing GET workspace/members/room requests preserve semantics", as
     },
   );
 });
+
+test("malformed roomId and labelId UUIDs return HTTP 400 before calling Prisma", async () => {
+  await withServer({}, async ({ api, calls }) => {
+    const checks = [
+      await api(`/workspaces/${VALID_WS_ID}/rooms/not-a-uuid`, {
+        method: "PATCH",
+        body: { name: "Updated Room" },
+      }),
+      await api(`/workspaces/${VALID_WS_ID}/rooms/not-a-uuid`, {
+        method: "DELETE",
+      }),
+      await api(`/workspaces/${VALID_WS_ID}/rooms/not-a-uuid/roles`, {
+        method: "POST",
+        body: { name: "Design", color: "#53664b", priority: 10 },
+      }),
+      await api(`/workspaces/${VALID_WS_ID}/rooms/${VALID_ROOM_ID}/roles/not-a-uuid`, {
+        method: "PATCH",
+        body: { name: "Design", color: "#53664b", priority: 10 },
+      }),
+      await api(`/workspaces/${VALID_WS_ID}/rooms/${VALID_ROOM_ID}/roles/not-a-uuid`, {
+        method: "DELETE",
+      }),
+    ];
+
+    for (const res of checks) {
+      assert.equal(res.status, 400);
+    }
+    assert.equal(calls.length, 0);
+  });
+});
+
+test("PATCH /workspaces/:wsId/members/:userId enforces moderator escalation guard and invokes onRoomAccessRevoked on removal", async () => {
+  const revokedEvents = [];
+  await withServer(
+    {
+      workspaceMember: {
+        findUnique: async ({ where }) => {
+          const { workspaceId, userId } = where.workspaceId_userId;
+          if (workspaceId !== VALID_WS_ID) return null;
+          if (userId === VALID_OWNER_ID) return { workspaceId, userId, role: "OWNER" };
+          if (userId === VALID_MEMBER_ID) return { workspaceId, userId, role: "MEMBER" };
+          return null;
+        },
+      },
+      roomMember: {
+        findUnique: async ({ where }) => {
+          const { userId } = where.workspaceId_roomId_userId;
+          if (userId === VALID_MEMBER_ID) {
+            return { workspaceId: VALID_WS_ID, roomId: VALID_ROOM_ID, userId, role: "MODERATOR", labelIds: [] };
+          }
+          return null;
+        },
+        deleteMany: async () => ({ count: 1 }),
+        findFirst: async () => null,
+      },
+      room: {
+        findFirst: async () => ({ id: VALID_ROOM_ID, workspaceId: VALID_WS_ID }),
+        update: async () => ({ id: VALID_ROOM_ID, hostId: null }),
+      },
+    },
+    async ({ api }) => {
+      const modToken = createAccessToken({ id: VALID_MEMBER_ID, email: "mod@example.com" });
+
+      // Moderator cannot promote someone to HOST
+      const escalate = await api(`/workspaces/${VALID_WS_ID}/members/${VALID_MEMBER_ID}`, {
+        method: "PATCH",
+        token: modToken,
+        body: { roomId: VALID_ROOM_ID, roomRole: "HOST" },
+      });
+      assert.equal(escalate.status, 403);
+
+      // Owner can revoke room access (roomRole: null) and trigger Socket.IO eviction hook
+      const revoke = await api(`/workspaces/${VALID_WS_ID}/members/${VALID_MEMBER_ID}`, {
+        method: "PATCH",
+        body: { roomId: VALID_ROOM_ID, roomRole: null },
+      });
+      assert.equal(revoke.status, 200);
+      assert.equal(revoke.data?.updated, true);
+      assert.deepEqual(revokedEvents, [
+        { workspaceId: VALID_WS_ID, roomId: VALID_ROOM_ID, userId: VALID_MEMBER_ID },
+      ]);
+    },
+    { onRoomAccessRevoked: (event) => revokedEvents.push(event) },
+  );
+});

@@ -121,7 +121,7 @@ const NotesEditor = memo(function NotesEditor({
     <div className="notes-column">
       <div className="notes-column-header">
         <div>
-          <p className="eyebrow">{t('note.title')}</p>
+          <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">01 /</span>{t('note.title')}</p>
           <h2>{t('note.heading')}</h2>
         </div>
         <div className="notes-column-actions">
@@ -219,7 +219,7 @@ const SharedNotesList = memo(function SharedNotesList({
     <div className="notes-column">
       <div className="notes-column-header">
         <div>
-          <p className="eyebrow">{t('note.sharedEyebrow')}</p>
+          <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">02 /</span>{t('note.sharedEyebrow')}</p>
           <h2>{sharedTitle}</h2>
         </div>
       </div>

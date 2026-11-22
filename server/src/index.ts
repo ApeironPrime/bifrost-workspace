@@ -11,7 +11,12 @@ import {
   getAuthRateLimiters,
   parseTrustProxySetting,
 } from "./lib/rateLimit.js";
-import { getRoomPresence, revokeWorkspaceMemberSessions } from "./lib/revocation.js";
+import {
+  getRoomPresence,
+  getWorkspaceLivePresence,
+  revokeRoomSessions,
+  revokeWorkspaceMemberSessions,
+} from "./lib/revocation.js";
 import { createTurnServiceFromEnv } from "./lib/turn.js";
 import { authRouter } from "./routes/auth.js";
 import { roomRouter } from "./routes/rooms.js";
@@ -70,6 +75,14 @@ app.use(
   "/api/workspaces",
   createWorkspaceRouter(prisma, {
     onMemberRemoved: (event) => revokeWorkspaceMemberSessions(io, prisma, event),
+    onRoomDeleted: (event) =>
+      revokeRoomSessions(io, {
+        workspaceId: event.workspaceId,
+        roomId: event.roomId,
+        message: "Phòng này đã bị xóa bởi Workspace Owner.",
+      }),
+    onRoomAccessRevoked: (event) => revokeRoomSessions(io, event),
+    getWorkspacePresence: (workspaceId) => getWorkspaceLivePresence(io, prisma, workspaceId),
   }),
 );
 app.use("/api/rooms", roomRouter);
