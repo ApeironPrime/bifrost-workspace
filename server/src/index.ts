@@ -31,6 +31,25 @@ const httpServer = createServer(app);
 const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
 const port = Number(process.env.PORT ?? 3000);
 
+function resolveCorsOrigins(rawClientUrl: string): string | string[] {
+  try {
+    const parsed = new URL(rawClientUrl);
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      const siblingHost = parsed.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      const portPart = parsed.port ? `:${parsed.port}` : "";
+      return [
+        `${parsed.protocol}//${parsed.hostname}${portPart}`,
+        `${parsed.protocol}//${siblingHost}${portPart}`,
+      ];
+    }
+  } catch {
+    // Keep raw string when CLIENT_URL is not a single URL.
+  }
+  return rawClientUrl;
+}
+
+const allowedOrigins = resolveCorsOrigins(clientUrl);
+
 declare module "socket.io" {
   interface SocketData {
     user: {
@@ -49,12 +68,12 @@ type PresencePeer = {
 };
 
 const io = new Server(httpServer, {
-  cors: { origin: clientUrl },
+  cors: { origin: allowedOrigins },
 });
 
 app.use(
   cors({
-    origin: clientUrl,
+    origin: allowedOrigins,
     exposedHeaders: [...RATE_LIMIT_EXPOSED_HEADERS],
   }),
 );

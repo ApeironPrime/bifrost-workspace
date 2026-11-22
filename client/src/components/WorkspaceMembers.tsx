@@ -699,7 +699,7 @@ export const WorkspaceMembers = memo(function WorkspaceMembers(props: Props) {
       })
       .then((body) => {
         if (!controller.signal.aborted) {
-          setMock(body.source === 'mock')
+          setMock(body.source === 'mock' || Array.isArray(body.roomRoles))
           setMembers(body.members)
           setLabels(body.roomRoles ?? [])
         }

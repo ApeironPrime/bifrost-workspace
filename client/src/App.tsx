@@ -273,7 +273,14 @@ function App() {
   }, []);
 
   // Auth states
-  const [token, setToken] = useState(() => localStorage.getItem("bifrost_token") ?? "");
+  const [token, setToken] = useState(() => {
+    const stored = localStorage.getItem("bifrost_token") ?? "";
+    if (import.meta.env.VITE_DATA_MODE === "api" && isDevMockSession(stored)) {
+      localStorage.removeItem("bifrost_token");
+      return "";
+    }
+    return stored;
+  });
 
   useEffect(() => {
     if (isDevMockSession(token)) {
@@ -2135,7 +2142,6 @@ function App() {
   }
 
   if (
-    isDevMockSession(token) &&
     !workspaceLoading &&
     !workspaceLoadError &&
     workspaces.length === 0 &&
