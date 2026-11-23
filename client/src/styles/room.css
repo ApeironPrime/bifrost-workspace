@@ -744,6 +744,69 @@
   border-color: #c9a78066;
 }
 
+.workspace-edition .video-tile.has-live-video {
+  background: #10201a;
+}
+
+.tile-video-element {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  background: #0d1a15;
+}
+
+.tile-video-element.is-mirrored {
+  transform: scaleX(-1);
+}
+
+.tile-video-element.is-screen {
+  object-fit: contain;
+  background: #0b1612;
+}
+
+.video-tile.has-live-video .tile-atelier-head,
+.video-tile.has-live-video .participant-tag {
+  background: linear-gradient(180deg, rgba(16, 32, 26, 0.72) 0%, rgba(16, 32, 26, 0) 100%);
+  padding-inline: 14px;
+  padding-top: 10px;
+  border-color: transparent;
+}
+
+.video-tile.has-live-video .participant-tag {
+  background: linear-gradient(0deg, rgba(16, 32, 26, 0.82) 0%, rgba(16, 32, 26, 0) 100%);
+  padding-top: 18px;
+  padding-bottom: 10px;
+  margin-top: auto;
+}
+
+.tile-device-state.is-live {
+  border-color: #8fc29a80;
+  color: #e6f6ea;
+  background: rgba(36, 86, 56, 0.72);
+}
+
+.tile-ambient-wave.is-live i {
+  background: linear-gradient(180deg, #9ce0ae 0%, #d3b18b 100%);
+  animation-duration: 0.72s;
+}
+
+.meeting-notice-banner.is-error {
+  color: #f2b7a6;
+}
+
+.workspace-edition .control-btn.is-active {
+  background: #d3b18b;
+  border-color: #d3b18b;
+  color: #1f3329;
+}
+
+.workspace-edition .control-btn.is-active:hover {
+  background: #e1c39f;
+}
+
 .tile-bridge-art {
   position: absolute;
   inset: auto -10% -22% -10%;

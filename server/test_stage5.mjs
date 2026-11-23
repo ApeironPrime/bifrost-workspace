@@ -218,12 +218,29 @@ async function runTests() {
     check("Owner nhận room:joined đúng Room", aliceJoinedData.roomName === "Phòng Họp Sprint");
     check("Presence ban đầu có đúng một người", alicePresenceCount === 1);
 
-    // d. Bob kết nối và join R1
+    // d. Bob chưa được phân vào R1 -> bị chặn; sau khi Owner phân quyền -> join thành công
     const socketB = ClientSocket(SOCKET_URL, {
       transports: ["websocket"],
       auth: { token: tokenB },
     });
     await new Promise((r) => socketB.on("connect", r));
+
+    const bobUnassignedPromise = new Promise((resolve) => {
+      socketB.once("room:error", (data) => resolve(data.message));
+      socketB.emit("room:join", roomId);
+    });
+    const bobUnassignedErr = await bobUnassignedPromise;
+    check(
+      "Thành viên chưa phân vào Room bị chặn khi Socket join Room",
+      typeof bobUnassignedErr === "string" && bobUnassignedErr.includes("chưa được phân vào phòng"),
+    );
+
+    const assignBobR1 = await request(`/workspaces/${workspaceId}/members/${userB.data.user.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { roomId, roomRole: "MEMBER" },
+    });
+    check("Owner phân quyền Member vào Room R1 trả về 200", assignBobR1.status === 200);
 
     const bobJoinedPromise = new Promise((resolve) => {
       socketB.on("room:joined", (data) => resolve(data));
@@ -485,6 +502,22 @@ async function runTests() {
     });
     check("Charlie mời Bob vào Workspace B (201)", inviteBobWsB.status === 201);
 
+    await request(`/workspaces/${workspaceId}/members/${bobId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { roomId, roomRole: "MEMBER" },
+    });
+    await request(`/workspaces/${workspaceId}/members/${bobId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { roomId: room2Id, roomRole: "MEMBER" },
+    });
+    await request(`/workspaces/${wsBId}/members/${bobId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${tokenC}` },
+      body: { roomId: roomBId, roomRole: "MEMBER" },
+    });
+
     async function connectAndJoin(token, targetRoomId) {
       const sock = ClientSocket(SOCKET_URL, {
         transports: ["websocket"],
@@ -725,6 +758,51 @@ async function runTests() {
         if (s.connected) s.disconnect();
       }
     }
+
+    // 18. Kiểm thử Refresh Token Rotation, Replay Detection, Change Password & Logout
+    console.log("\n--- Kiểm thử Refresh Token & Đổi mật khẩu ---");
+    const refresh1 = await request("/auth/refresh", {
+      method: "POST",
+      body: { refreshToken: userA.data.refreshToken },
+    });
+    check("Refresh token xoay vòng trả về 200 kèm token mới", refresh1.status === 200 && Boolean(refresh1.data.refreshToken));
+
+    const replayRefresh = await request("/auth/refresh", {
+      method: "POST",
+      body: { refreshToken: userA.data.refreshToken },
+    });
+    check("Dùng lại refresh token cũ (replay) bị từ chối 401", replayRefresh.status === 401);
+
+    const revokedAfterReplay = await request("/auth/refresh", {
+      method: "POST",
+      body: { refreshToken: refresh1.data.refreshToken },
+    });
+    check("Refresh token mới cũng bị thu hồi sau khi phát hiện replay (401)", revokedAfterReplay.status === 401);
+
+    const reloginA = await request("/auth/login", {
+      method: "POST",
+      body: { email: ownerEmail, password: "password123" },
+    });
+    check("Đăng nhập lại lấy cặp token mới (200)", reloginA.status === 200 && Boolean(reloginA.data.refreshToken));
+
+    const changePassRes = await request("/auth/change-password", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${reloginA.data.token}` },
+      body: { currentPassword: "password123", newPassword: "newPassword456!" },
+    });
+    check("Đổi mật khẩu trả về 200 kèm cặp token mới", changePassRes.status === 200 && Boolean(changePassRes.data.refreshToken));
+
+    const logoutRes = await request("/auth/logout", {
+      method: "POST",
+      body: { refreshToken: changePassRes.data.refreshToken },
+    });
+    check("Đăng xuất thu hồi refresh token trả về 204", logoutRes.status === 204);
+
+    const refreshAfterLogout = await request("/auth/refresh", {
+      method: "POST",
+      body: { refreshToken: changePassRes.data.refreshToken },
+    });
+    check("Refresh sau khi đăng xuất bị từ chối 401", refreshAfterLogout.status === 401);
 
     console.log("\n==========================================");
     console.log(" TẤT CẢ CÁC BÀI KIỂM THỬ ĐỀU THÀNH CÔNG! ");

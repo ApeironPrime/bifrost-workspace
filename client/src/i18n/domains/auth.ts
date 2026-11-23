@@ -122,6 +122,15 @@ const authVi = {
     saveButton: 'Lưu hồ sơ',
     updatedToast: 'Đã cập nhật hồ sơ.',
     updateFailedToast: 'Không thể cập nhật hồ sơ.',
+    securityHeading: 'Đổi mật khẩu',
+    currentPasswordLabel: 'Mật khẩu hiện tại',
+    newPasswordLabel: 'Mật khẩu mới',
+    confirmNewPasswordLabel: 'Xác nhận mật khẩu mới',
+    changePasswordButton: 'Cập nhật mật khẩu',
+    changingPassword: 'Đang đổi mật khẩu…',
+    passwordUpdatedToast: 'Đã cập nhật mật khẩu.',
+    passwordUpdateFailed: 'Không thể đổi mật khẩu.',
+    passwordMismatch: 'Mật khẩu mới xác nhận chưa khớp.',
   },
 } as const
 
@@ -248,6 +257,15 @@ const authEn = {
     saveButton: 'Save profile',
     updatedToast: 'Profile updated.',
     updateFailedToast: 'Could not update your profile.',
+    securityHeading: 'Change password',
+    currentPasswordLabel: 'Current password',
+    newPasswordLabel: 'New password',
+    confirmNewPasswordLabel: 'Confirm new password',
+    changePasswordButton: 'Update password',
+    changingPassword: 'Updating password…',
+    passwordUpdatedToast: 'Password updated.',
+    passwordUpdateFailed: 'Could not update password.',
+    passwordMismatch: 'New password confirmation does not match.',
   },
 } as const satisfies AuthShape
 
@@ -372,6 +390,15 @@ const authJa = {
     saveButton: '保存',
     updatedToast: 'プロフィールを更新しました。',
     updateFailedToast: 'プロフィールの更新に失敗しました。',
+    securityHeading: 'パスワード変更',
+    currentPasswordLabel: '現在のパスワード',
+    newPasswordLabel: '新しいパスワード',
+    confirmNewPasswordLabel: '新しいパスワード（確認）',
+    changePasswordButton: 'パスワードを更新',
+    changingPassword: '更新中…',
+    passwordUpdatedToast: 'パスワードを更新しました。',
+    passwordUpdateFailed: 'パスワードを更新できませんでした。',
+    passwordMismatch: '新しいパスワードの確認が一致しません。',
   },
 } as const satisfies AuthShape
 

@@ -79,6 +79,7 @@ app.use(
 );
 app.post("/api/auth/login", authRateLimiters.loginIpLimiter);
 app.post("/api/auth/register", authRateLimiters.registerIpLimiter);
+app.post("/api/auth/refresh", authRateLimiters.loginIpLimiter);
 app.use(express.json());
 
 app.get("/api/health", (_request, response) => {
@@ -188,6 +189,9 @@ io.on("connection", (socket) => {
               },
             },
           },
+          members: {
+            where: { userId: socket.data.user.id },
+          },
         },
       });
 
@@ -206,6 +210,19 @@ io.on("connection", (socket) => {
           await leaveRoomInternal(socket, socketRoomKey);
         }
         socket.emit("room:error", { message: "Bạn không thuộc workspace chứa room này." });
+        return;
+      }
+
+      const workspaceMembership = room.workspace.members[0];
+      const hasRoomAccess =
+        workspaceMembership.role === "OWNER" ||
+        room.hostId === socket.data.user.id ||
+        room.members.length > 0;
+      if (!hasRoomAccess) {
+        if (socket.rooms.has(socketRoomKey)) {
+          await leaveRoomInternal(socket, socketRoomKey);
+        }
+        socket.emit("room:error", { message: "Bạn chưa được phân vào phòng này." });
         return;
       }
 
@@ -235,7 +252,7 @@ io.on("connection", (socket) => {
       if (!socket.connected) return;
       await socket.join(socketRoomKey);
 
-      // Re-verify membership after joining the Socket.IO room so an in-flight
+      // Re-verify membership & room access after joining the Socket.IO room so an in-flight
       // removal during the initial DB query cannot leave an unauthorized socket inside.
       const stillMember = await prisma.workspaceMember.findUnique({
         where: {
@@ -244,9 +261,25 @@ io.on("connection", (socket) => {
             userId: socket.data.user.id,
           },
         },
-        select: { userId: true },
+        select: { userId: true, role: true },
       });
-      if (!stillMember || !socket.connected) {
+      const stillRoomAccess =
+        stillMember &&
+        (stillMember.role === "OWNER" ||
+          room.hostId === socket.data.user.id ||
+          Boolean(
+            await prisma.roomMember.findUnique({
+              where: {
+                workspaceId_roomId_userId: {
+                  workspaceId: room.workspaceId,
+                  roomId,
+                  userId: socket.data.user.id,
+                },
+              },
+              select: { userId: true },
+            }),
+          ));
+      if (!stillRoomAccess || !socket.connected) {
         await socket.leave(socketRoomKey);
         if (socket.connected) {
           socket.emit("room:error", { message: "Bạn không thuộc workspace chứa room này." });

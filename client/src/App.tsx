@@ -180,6 +180,10 @@ function App() {
   const noteSharedRef = useRef(false);
   const noteResyncTimerRef = useRef<number | null>(null);
   const onlinePeersRef = useRef<PresencePeer[]>([]);
+  const localMediaStreamRef = useRef<MediaStream | null>(null);
+  const localScreenStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamsMapRef = useRef(new Map<string, MediaStream>());
+  const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
   // Verified remote identities sourced synchronously from Socket.IO presence/join events
   // (decoupled from UI `onlinePeers` React state; trust state reflects latest server event
   // and cannot detect revocation while Socket.IO signaling is temporarily disconnected).
@@ -304,6 +308,17 @@ function App() {
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
   const [profileImageBusy, setProfileImageBusy] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [camEnabled, setCamEnabled] = useState(false);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [mediaError, setMediaError] = useState("");
+  const [localVideoStream, setLocalVideoStream] = useState<MediaStream | null>(null);
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
 
   // Workspace states
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -529,11 +544,64 @@ function App() {
     };
   }, []);
 
+  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+    const currentStored = localStorage.getItem("bifrost_token") ?? "";
+    if (isDevMockSession(currentStored)) return null;
+    const storedRefresh = localStorage.getItem("bifrost_refresh_token");
+    if (!storedRefresh) return null;
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+
+    const run = (async () => {
+      try {
+        const res = await fetchAppApi(apiUrl("/auth/refresh"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: storedRefresh }),
+        });
+        if (!res.ok) return null;
+        const body = (await res.json()) as { token?: string; refreshToken?: string; user?: User };
+        if (!body.token) return null;
+        localStorage.setItem("bifrost_token", body.token);
+        if (body.refreshToken) {
+          localStorage.setItem("bifrost_refresh_token", body.refreshToken);
+        }
+        setToken(body.token);
+        if (body.user) {
+          setUser(body.user);
+          memberNameRef.current = body.user.name;
+        }
+        return body.token;
+      } catch {
+        return null;
+      } finally {
+        refreshPromiseRef.current = null;
+      }
+    })();
+
+    refreshPromiseRef.current = run;
+    return run;
+  }, []);
+
   useEffect(() => {
     if (!token) return;
     const controller = new AbortController();
     fetchAppApi(apiUrl("/auth/me"), { headers: authHeaders(), signal: controller.signal })
-      .then(async (response) => ({ ok: response.ok, body: await response.json() }))
+      .then(async (response) => {
+        if (response.status === 401 && !isDevMockSession(token)) {
+          const nextToken = await refreshAccessToken();
+          if (nextToken && !controller.signal.aborted) {
+            const retryRes = await fetchAppApi(apiUrl("/auth/me"), {
+              headers: {
+                Authorization: `Bearer ${nextToken}`,
+                "Content-Type": "application/json",
+              },
+              signal: controller.signal,
+            });
+            return { ok: retryRes.ok, body: await retryRes.json() };
+          }
+        }
+        return { ok: response.ok, body: await response.json() };
+      })
       .then(({ ok, body }) => {
         if (controller.signal.aborted) return;
         if (!ok) throw new Error();
@@ -546,6 +614,7 @@ function App() {
       .catch(() => {
         if (controller.signal.aborted) return;
         localStorage.removeItem("bifrost_token");
+        localStorage.removeItem("bifrost_refresh_token");
         setToken("");
         setUser(null);
         setWorkspaces([]);
@@ -558,7 +627,7 @@ function App() {
       })
       .finally(() => { if (!controller.signal.aborted) setAuthReady(true); });
     return () => controller.abort();
-  }, [token, authHeaders]);
+  }, [token, authHeaders, refreshAccessToken]);
 
   useEffect(() => {
     if (authReady) {
@@ -720,6 +789,9 @@ function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.message ?? t("auth.authFailed"));
       localStorage.setItem("bifrost_token", body.token);
+      if (typeof body.refreshToken === "string" && body.refreshToken) {
+        localStorage.setItem("bifrost_refresh_token", body.refreshToken);
+      }
       setWorkspaceLoading(true);
       setWorkspaceLoadError(false);
       setToken(body.token);
@@ -1112,6 +1184,14 @@ function App() {
     peersRef.current.delete(peerId);
     const remainingOpen = openConnectionCount(channelsRef.current.values());
     setPeersCount(remainingOpen);
+    if (remoteStreamsMapRef.current.delete(peerId)) {
+      setRemoteStreams((current) => {
+        if (!(peerId in current)) return current;
+        const next = { ...current };
+        delete next[peerId];
+        return next;
+      });
+    }
     if (remainingOpen === 0) {
       clearNoteResyncTimer();
       setNoteResyncing(false);
@@ -1350,6 +1430,48 @@ function App() {
       };
 
       peer.ondatachannel = ({ channel }) => setupDataChannel(peerId, channel, targetRoomId);
+      peer.ontrack = (event) => {
+        if (peersRef.current.get(peerId) !== peer || activeRoomRef.current?.id !== targetRoomId) return;
+        let peerStream = remoteStreamsMapRef.current.get(peerId);
+        if (!peerStream) {
+          peerStream = new MediaStream();
+          remoteStreamsMapRef.current.set(peerId, peerStream);
+        }
+        const incomingTrack = event.track;
+        const existingSameKind = peerStream
+          .getTracks()
+          .filter((track) => track.kind === incomingTrack.kind && track.id !== incomingTrack.id);
+        for (const oldTrack of existingSameKind) {
+          peerStream.removeTrack(oldTrack);
+        }
+        if (!peerStream.getTracks().some((track) => track.id === incomingTrack.id)) {
+          peerStream.addTrack(incomingTrack);
+        }
+        const snapshotStream = new MediaStream(peerStream.getTracks());
+        remoteStreamsMapRef.current.set(peerId, snapshotStream);
+        setRemoteStreams((current) => ({ ...current, [peerId]: snapshotStream }));
+
+        incomingTrack.onended = () => {
+          const cur = remoteStreamsMapRef.current.get(peerId);
+          if (!cur) return;
+          cur.removeTrack(incomingTrack);
+          const nextStream = new MediaStream(cur.getTracks());
+          remoteStreamsMapRef.current.set(peerId, nextStream);
+          setRemoteStreams((prev) => ({ ...prev, [peerId]: nextStream }));
+        };
+      };
+
+      const activeAudio = localMediaStreamRef.current?.getAudioTracks()[0] ?? null;
+      const activeScreenVideo = localScreenStreamRef.current?.getVideoTracks()[0] ?? null;
+      const activeCamVideo = localMediaStreamRef.current?.getVideoTracks()[0] ?? null;
+      const activeVideo = activeScreenVideo ?? activeCamVideo;
+      if (activeAudio && localMediaStreamRef.current) {
+        peer.addTrack(activeAudio, localMediaStreamRef.current);
+      }
+      if (activeVideo) {
+        const videoOwner = activeScreenVideo ? localScreenStreamRef.current : localMediaStreamRef.current;
+        if (videoOwner) peer.addTrack(activeVideo, videoOwner);
+      }
       peer.onnegotiationneeded = () => {
         if (peersRef.current.get(peerId) === peer && peer.connectionState !== "closed") {
           void negotiateForPeer(peerId, targetRoomId, false);
@@ -1431,6 +1553,18 @@ function App() {
     peersRef.current.clear();
     activeSocket?.disconnect();
 
+    localMediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localMediaStreamRef.current = null;
+    localScreenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localScreenStreamRef.current = null;
+    remoteStreamsMapRef.current.clear();
+    setMicEnabled(false);
+    setCamEnabled(false);
+    setScreenSharing(false);
+    setMediaError("");
+    setLocalVideoStream(null);
+    setRemoteStreams({});
+
     noteSharedRef.current = false;
     noteTextRef.current = "";
     noteUpdatedAtRef.current = undefined;
@@ -1454,10 +1588,21 @@ function App() {
   }, [changeRoute, selectedWorkspaceId, railTipStore, clearNoteResyncTimer, applyNoteError, getIceManager]);
 
   const logout = useCallback(() => {
+    const refreshTokenToRevoke = localStorage.getItem("bifrost_refresh_token");
+    if (refreshTokenToRevoke && !isDevMockSession(tokenRef.current)) {
+      void fetchAppApi(apiUrl("/auth/logout"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: refreshTokenToRevoke }),
+      }).catch(() => {
+        /* Best-effort server revocation; local state still clears. */
+      });
+    }
     leaveRoom();
     workspaceMemberRosterRef.current = null;
     setIsSidebarOpen(false);setIsRightPanelOpen(false);railTipStore.set(null);
     localStorage.removeItem("bifrost_token");
+    localStorage.removeItem("bifrost_refresh_token");
     if(userId) for(const key of Object.keys(sessionStorage)) if(key.startsWith('bifrost-room-draft:'+encodeURIComponent(userId)+':')) sessionStorage.removeItem(key);
     changeRoute({workspaceId:'',roomId:'',tab:'meeting'},true);
     setToken("");
@@ -1478,6 +1623,191 @@ function App() {
     setRoomMessage(''); setRoomLoadError(''); setInviteError(''); setWorkspaceError('');
     setDiscardForm(null);setAuthEmail(''); setAuthName(''); setAuthPassword(''); setAuthError(''); setAuthMode('login');
   }, [leaveRoom, userId, changeRoute, railTipStore]);
+
+  const syncTrackToAllPeers = useCallback(
+    async (kind: "audio" | "video", track: MediaStreamTrack | null, ownerStream: MediaStream | null) => {
+      const updates: Promise<void>[] = [];
+      peersRef.current.forEach((peer) => {
+        if (peer.connectionState === "closed") return;
+        const sender = peer.getSenders().find((entry) => entry.track?.kind === kind);
+        if (sender) {
+          updates.push(sender.replaceTrack(track).catch(() => {}));
+        } else if (track && ownerStream) {
+          peer.addTrack(track, ownerStream);
+        }
+      });
+      await Promise.all(updates);
+    },
+    [],
+  );
+
+  const toggleMic = useCallback(async () => {
+    if (activeRoomRef.current?.access === "VIEWER") return;
+    setMediaError("");
+    const existingStream = localMediaStreamRef.current;
+    const existingAudio = existingStream?.getAudioTracks()[0] ?? null;
+
+    if (micEnabled && existingAudio) {
+      existingAudio.stop();
+      existingStream?.removeTrack(existingAudio);
+      setMicEnabled(false);
+      await syncTrackToAllPeers("audio", null, null);
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const msg = t("meeting.mediaUnsupported");
+      setMediaError(msg);
+      addToast(msg, "error");
+      return;
+    }
+
+    try {
+      const captured = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioTrack = captured.getAudioTracks()[0] ?? null;
+      if (!audioTrack) return;
+      const targetStream = existingStream ?? new MediaStream();
+      targetStream.addTrack(audioTrack);
+      localMediaStreamRef.current = targetStream;
+      setMicEnabled(true);
+      await syncTrackToAllPeers("audio", audioTrack, targetStream);
+    } catch {
+      const msg = t("meeting.mediaPermissionDenied");
+      setMediaError(msg);
+      addToast(msg, "error");
+    }
+  }, [micEnabled, syncTrackToAllPeers, t, addToast]);
+
+  const toggleCam = useCallback(async () => {
+    if (activeRoomRef.current?.access === "VIEWER") return;
+    setMediaError("");
+    const existingStream = localMediaStreamRef.current;
+    const existingVideo = existingStream?.getVideoTracks()[0] ?? null;
+
+    if (camEnabled && existingVideo) {
+      existingVideo.stop();
+      existingStream?.removeTrack(existingVideo);
+      setCamEnabled(false);
+      if (!localScreenStreamRef.current) {
+        setLocalVideoStream(null);
+        await syncTrackToAllPeers("video", null, null);
+      }
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const msg = t("meeting.mediaUnsupported");
+      setMediaError(msg);
+      addToast(msg, "error");
+      return;
+    }
+
+    try {
+      const captured = await navigator.mediaDevices.getUserMedia({ video: true });
+      const videoTrack = captured.getVideoTracks()[0] ?? null;
+      if (!videoTrack) return;
+      const targetStream = existingStream ?? new MediaStream();
+      targetStream.addTrack(videoTrack);
+      localMediaStreamRef.current = targetStream;
+      setCamEnabled(true);
+      if (!localScreenStreamRef.current) {
+        setLocalVideoStream(new MediaStream([videoTrack]));
+        await syncTrackToAllPeers("video", videoTrack, targetStream);
+      }
+    } catch {
+      const msg = t("meeting.mediaPermissionDenied");
+      setMediaError(msg);
+      addToast(msg, "error");
+    }
+  }, [camEnabled, syncTrackToAllPeers, t, addToast]);
+
+  const stopScreenShareInternal = useCallback(async () => {
+    const screenStream = localScreenStreamRef.current;
+    if (screenStream) {
+      screenStream.getTracks().forEach((track) => track.stop());
+      localScreenStreamRef.current = null;
+    }
+    setScreenSharing(false);
+    const camTrack = localMediaStreamRef.current?.getVideoTracks()[0] ?? null;
+    if (camTrack && localMediaStreamRef.current) {
+      setLocalVideoStream(new MediaStream([camTrack]));
+      await syncTrackToAllPeers("video", camTrack, localMediaStreamRef.current);
+    } else {
+      setLocalVideoStream(null);
+      await syncTrackToAllPeers("video", null, null);
+    }
+  }, [syncTrackToAllPeers]);
+
+  const toggleScreenShare = useCallback(async () => {
+    if (activeRoomRef.current?.access === "VIEWER") return;
+    setMediaError("");
+    if (screenSharing || localScreenStreamRef.current) {
+      await stopScreenShareInternal();
+      return;
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      const msg = t("meeting.mediaUnsupported");
+      setMediaError(msg);
+      addToast(msg, "error");
+      return;
+    }
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0] ?? null;
+      if (!screenTrack) return;
+      localScreenStreamRef.current = screenStream;
+      screenTrack.onended = () => {
+        void stopScreenShareInternal();
+      };
+      setScreenSharing(true);
+      setLocalVideoStream(screenStream);
+      await syncTrackToAllPeers("video", screenTrack, screenStream);
+    } catch {
+      const msg = t("meeting.mediaPermissionDenied");
+      setMediaError(msg);
+      addToast(msg, "error");
+    }
+  }, [screenSharing, stopScreenShareInternal, syncTrackToAllPeers, t, addToast]);
+
+  const submitChangePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (passwordSaving || isDevMockSession(token)) return;
+    setPasswordError("");
+    if (newPasswordInput !== confirmNewPasswordInput) {
+      setPasswordError(t("profile.passwordMismatch"));
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const response = await fetchAppApi(apiUrl("/auth/change-password"), {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          currentPassword: currentPasswordInput,
+          newPassword: newPasswordInput,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("profile.passwordUpdateFailed"));
+      if (body.token) {
+        localStorage.setItem("bifrost_token", body.token);
+        setToken(body.token);
+      }
+      if (body.refreshToken) {
+        localStorage.setItem("bifrost_refresh_token", body.refreshToken);
+      }
+      setCurrentPasswordInput("");
+      setNewPasswordInput("");
+      setConfirmNewPasswordInput("");
+      addToast(t("profile.passwordUpdatedToast"), "success");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : t("profile.passwordUpdateFailed");
+      setPasswordError(msg);
+      addToast(msg, "error");
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
 
   useEffect(() => {
     onTurnUnauthorizedRef.current = () => {
@@ -3101,6 +3431,15 @@ function App() {
                       currentUserAvatar={user.profile?.avatarDataUrl}
                       roomName={currentRoom.name}
                       onlinePeers={onlinePeers}
+                      micEnabled={micEnabled}
+                      camEnabled={camEnabled}
+                      screenSharing={screenSharing}
+                      mediaError={mediaError}
+                      localVideoStream={localVideoStream}
+                      remoteStreams={remoteStreams}
+                      onToggleMic={() => void toggleMic()}
+                      onToggleCam={() => void toggleCam()}
+                      onToggleScreenShare={() => void toggleScreenShare()}
                       onLeaveRoom={leaveRoom}
                       onCopyRoomId={handleCopyCurrentRoomId}
                       copiedRoomId={copiedRoomId}
@@ -3498,6 +3837,81 @@ function App() {
                 </button>
               </div>
             </form>
+            {!isDevMockSession(token) && (
+              <form onSubmit={submitChangePassword} className="form-stack profile-security-form" aria-busy={passwordSaving || undefined}>
+                <hr className="modal-section-divider" />
+                <p className="eyebrow">{t("profile.securityHeading")}</p>
+                <div className="form-field">
+                  <label htmlFor="modal-current-password" className="form-field-label">
+                    <span>{t("profile.currentPasswordLabel")}</span>
+                  </label>
+                  <input
+                    id="modal-current-password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    minLength={8}
+                    maxLength={100}
+                    disabled={passwordSaving}
+                    className="input-text"
+                    value={currentPasswordInput}
+                    onChange={(event) => setCurrentPasswordInput(event.target.value)}
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="modal-new-password" className="form-field-label">
+                    <span>{t("profile.newPasswordLabel")}</span>
+                  </label>
+                  <input
+                    id="modal-new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    maxLength={100}
+                    disabled={passwordSaving}
+                    className="input-text"
+                    value={newPasswordInput}
+                    onChange={(event) => setNewPasswordInput(event.target.value)}
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="modal-confirm-new-password" className="form-field-label">
+                    <span>{t("profile.confirmNewPasswordLabel")}</span>
+                  </label>
+                  <input
+                    id="modal-confirm-new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    maxLength={100}
+                    disabled={passwordSaving}
+                    className="input-text"
+                    value={confirmNewPasswordInput}
+                    onChange={(event) => setConfirmNewPasswordInput(event.target.value)}
+                  />
+                </div>
+                {passwordError && (
+                  <p className="form-error" role="alert">
+                    {passwordError}
+                  </p>
+                )}
+                <div className="modal-actions">
+                  <button
+                    type="submit"
+                    className="btn btn-secondary"
+                    disabled={passwordSaving}
+                    aria-busy={passwordSaving || undefined}
+                  >
+                    {passwordSaving && <span className="btn-spinner" aria-hidden="true" />}
+                    <span>
+                      {passwordSaving ? t("profile.changingPassword") : t("profile.changePasswordButton")}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            )}
           </section>
         </div>
       </MotionPresence>

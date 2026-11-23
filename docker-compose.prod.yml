@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bifrost}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-bifrost_db}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bifrost} -d ${POSTGRES_DB:-bifrost_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - bifrost_postgres_prod:/var/lib/postgresql/data
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    command: sh -c "npx prisma migrate deploy --config prisma7.config.ts && npm start"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    secrets:
+      - turn_shared_secret
+    environment:
+      PORT: 3000
+      CLIENT_URL: https://${BIFROST_DOMAIN:?BIFROST_DOMAIN is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bifrost}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bifrost_db}?schema=public
+      TRUST_PROXY: 172.16.0.0/12,10.0.0.0/8
+      STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302}
+      TURN_URLS: turn:${BIFROST_DOMAIN}:3478?transport=udp,turn:${BIFROST_DOMAIN}:3478?transport=tcp
+      TURN_SHARED_SECRET_FILE: /run/secrets/turn_shared_secret
+      TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-900}
+
+  client:
+    build:
+      context: ./client
+      args:
+        VITE_DATA_MODE: api
+        VITE_API_URL: /api
+        VITE_SIGNALING_URL: /
+    restart: unless-stopped
+    depends_on:
+      - server
+
+  turn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    secrets:
+      - turn_shared_secret
+    tmpfs:
+      - /run/coturn:rw,noexec,nosuid,size=4m,mode=1777
+    volumes:
+      - ./docker/coturn-entrypoint.sh:/usr/local/bin/coturn-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/coturn-entrypoint.sh"]
+    environment:
+      TURN_SHARED_SECRET_FILE: /run/secrets/turn_shared_secret
+      TURN_REALM: ${BIFROST_DOMAIN}
+      TURN_NETWORK_PROFILE: ${TURN_NETWORK_PROFILE:-public}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/tcp"
+      - "49160-49200:49160-49200/udp"
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    depends_on:
+      - client
+      - server
+    environment:
+      BIFROST_DOMAIN: ${BIFROST_DOMAIN:?BIFROST_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - bifrost_caddy_data:/data
+      - bifrost_caddy_config:/config
+
+secrets:
+  turn_shared_secret:
+    file: ./secrets/turn_shared_secret
+
+volumes:
+  bifrost_postgres_prod:
+  bifrost_caddy_data:
+  bifrost_caddy_config:
