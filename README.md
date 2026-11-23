@@ -9,21 +9,28 @@ Nền tảng cộng tác và họp nhóm theo phòng sử dụng mô hình **Hyb
 
 ```text
 bifrost-workspace/
-├── client/                  # Front-end React + TypeScript + Vite
+├── client/                  # Front-end React + TypeScript + Vite (Feature-based + Hooks)
 │   ├── dev/                 # Unit tests & AST i18n audit + TXT dev DB
 │   └── src/
-│       ├── components/      # AuthScreen, ProfileOnboarding, MeetingTab, MeetingBoard, ChatPane, NotesPane, FileShare, WorkspaceMembers...
-│       ├── homepage/        # Trang chủ giới thiệu (SculptureHero, CollaborationAtelier, MeetingJourney)
+│       ├── features/        # Nhóm theo tính năng nghiệp vụ
+│       │   ├── auth/        # AuthScreen, AuthActionDialog, ProfileOnboarding
+│       │   ├── homepage/    # Trang chủ giới thiệu (SculptureHero, CollaborationAtelier, MeetingJourney)
+│       │   ├── workspace/   # WorkspaceSwitcher, WorkspaceMembers, RoomLabelsEditor, WorkspaceLoadingScreen
+│       │   └── room/        # Phòng họp P2P: components/ (MeetingTab, MeetingBoard, ChatPane, NotesPane, FileShare) & hooks/ (useRoomMedia, ...)
+│       ├── shared/          # Dùng chung toàn app: components/ (UserAvatar, ConfirmDialog, Toast, ...) & hooks/ (useDelayedLoading, useDialogFocus, ...)
 │       ├── i18n/            # Hệ thống đa ngôn ngữ VI / EN / JA
 │       ├── lib/             # Core WebRTC signaling, ICE manager, file chunking, state helpers
 │       └── styles/          # Design tokens & stylesheets (tokens, shell, workspace, room)
-├── server/                  # Back-end Node.js + Express + Socket.IO + Prisma
+├── server/                  # Back-end Node.js + Express + Socket.IO + Prisma (MVC)
 │   ├── prisma/              # schema.prisma & PostgreSQL migrations
 │   ├── scripts/             # generate-turn-secret.mjs
 │   ├── src/
-│   │   ├── lib/             # auth (JWT/Refresh), prisma, rateLimit, revocation, turn, validation
+│   │   ├── routes/          # Định tuyến REST API (auth, workspaces, rooms, turn)
+│   │   ├── controllers/     # Nhận/trả HTTP request & validate (auth, workspace, room)
+│   │   ├── services/        # Nghiệp vụ & truy vấn Prisma (auth, workspace, room)
+│   │   ├── sockets/         # Xử lý Socket.IO & WebRTC signaling (room.socket.ts)
 │   │   ├── middleware/      # requireAuth
-│   │   └── routes/          # auth, workspaces, rooms, turn
+│   │   └── lib/             # auth (JWT/Refresh), prisma, rateLimit, revocation, turn, validation
 │   └── tests/               # Unit tests, integration tests & Stage 5 E2E
 ├── docker/                  # Caddyfile (HTTPS reverse proxy) & coturn-entrypoint.sh
 ├── docker-compose.yml       # Môi trường local

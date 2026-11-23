@@ -1,8 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import Homepage from './homepage/Homepage.tsx'
-import './components/PopoverMotion.css'
+import Homepage from './features/homepage/Homepage.tsx'
+import './shared/components/PopoverMotion.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

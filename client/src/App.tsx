@@ -1,8 +1,9 @@
-import { ConfirmDialog } from './components/ConfirmDialog'
-import { MotionPresence } from './components/MotionPresence'
-import { useTabTransition } from './lib/useTabTransition'
+import { ConfirmDialog } from './shared/components/ConfirmDialog'
+import { MotionPresence } from './shared/components/MotionPresence'
+import { useTabTransition } from './features/room/hooks/useTabTransition'
 import { tabDirection } from './lib/tabDirection'
-import { useRoomTabIndicator } from './lib/useRoomTabIndicator'
+import { useRoomTabIndicator } from './features/room/hooks/useRoomTabIndicator'
+import { useRoomMedia } from './features/room/hooks/useRoomMedia'
 import {
   getNextRoomTab,
   roomPanelElementId,
@@ -67,10 +68,10 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
-import { MeetingBoard, type MeetingBoardMessage } from "./components/MeetingBoard";
-import { FileShare, type FileShareMessage } from "./components/FileShare";
-import { MeetingTab } from "./components/MeetingTab";
-import { ToastContainer, type ToastItem, type ToastType } from "./components/Toast";
+import { MeetingBoard, type MeetingBoardMessage } from "./features/room/components/MeetingBoard";
+import { FileShare, type FileShareMessage } from "./features/room/components/FileShare";
+import { MeetingTab } from "./features/room/components/MeetingTab";
+import { ToastContainer, type ToastItem, type ToastType } from "./shared/components/Toast";
 import {
   LOCALE_META,
   formatInviteError,
@@ -82,7 +83,7 @@ import {
   type I18nKey,
   type Language,
 } from "./i18n";
-import { AuthScreen } from "./components/AuthScreen";
+import { AuthScreen } from "./features/auth/AuthScreen";
 import { apiUrl, fetchAppApi, isDevMockSession, SIGNALING_URL } from "./lib/appApi";
 import {
   createRoomIceManager,
@@ -102,26 +103,26 @@ import {
   negotiatePeerOffer,
   type PeerSignalingRecord,
 } from "./lib/peerSignaling";
-import { BifrostMark } from "./homepage/components/UI";
-import { AvatarPicker } from './components/AvatarPicker';
-import { AccountMenu } from './components/AccountMenu';
-import { ProfileOnboarding } from './components/ProfileOnboarding';
-import { SearchField } from './components/SearchField';
-import { UserAvatar } from './components/UserAvatar';
-import { WorkspaceMembers } from './components/WorkspaceMembers';
-import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
-import { ChatPane } from './components/ChatPane';
-import { NotesPane } from './components/NotesPane';
-import { SidebarRailTooltip } from './components/SidebarRailTooltip';
+import { BifrostMark } from "./features/homepage/components/UI";
+import { AvatarPicker } from './shared/components/AvatarPicker';
+import { AccountMenu } from './shared/components/AccountMenu';
+import { ProfileOnboarding } from './features/auth/ProfileOnboarding';
+import { SearchField } from './shared/components/SearchField';
+import { UserAvatar } from './shared/components/UserAvatar';
+import { WorkspaceMembers } from './features/workspace/WorkspaceMembers';
+import { WorkspaceSwitcher } from './features/workspace/WorkspaceSwitcher';
+import { ChatPane } from './features/room/components/ChatPane';
+import { NotesPane } from './features/room/components/NotesPane';
+import { SidebarRailTooltip } from './shared/components/SidebarRailTooltip';
 import { createRailTipStore } from './lib/railTipStore';
 import { getAvatarTone } from './lib/controlPrimitives';
 import { resetWorkspaceTransition } from './lib/delayedLoading';
-import { useDelayedLoading } from './lib/useDelayedLoading';
+import { useDelayedLoading } from './shared/hooks/useDelayedLoading';
 import { searchKey } from './lib/selectOptions';
-import { WorkspaceLoadingScreen } from './components/WorkspaceLoadingScreen';
+import { WorkspaceLoadingScreen } from './features/workspace/WorkspaceLoadingScreen';
 import { withCurrentUserHost } from './lib/roomHostProfile';
 import { canSendToRoom, openConnectionCount } from './lib/roomControls';
-import { useDialogFocus } from './lib/useDialogFocus';
+import { useDialogFocus } from './shared/hooks/useDialogFocus';
 import {
   getSessionStatusDisplay,
   roomInitials,
@@ -180,9 +181,6 @@ function App() {
   const noteSharedRef = useRef(false);
   const noteResyncTimerRef = useRef<number | null>(null);
   const onlinePeersRef = useRef<PresencePeer[]>([]);
-  const localMediaStreamRef = useRef<MediaStream | null>(null);
-  const localScreenStreamRef = useRef<MediaStream | null>(null);
-  const remoteStreamsMapRef = useRef(new Map<string, MediaStream>());
   const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
   // Verified remote identities sourced synchronously from Socket.IO presence/join events
   // (decoupled from UI `onlinePeers` React state; trust state reflects latest server event
@@ -271,6 +269,26 @@ function App() {
     addToast(msg, "error");
   }, [addToast]);
 
+  const {
+    micEnabled,
+    camEnabled,
+    screenSharing,
+    mediaError,
+    localVideoStream,
+    remoteStreams,
+    attachPeerMediaHandlers,
+    removePeerMedia,
+    stopAllRoomMedia,
+    toggleMic,
+    toggleCam,
+    toggleScreenShare,
+  } = useRoomMedia({
+    peersRef,
+    activeRoomRef,
+    t,
+    onErrorToast: handleErrorToast,
+  });
+
   const handleChatScroll = useCallback(() => {
     const log = chatLogRef.current;
     if (log) chatAtBottomRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 100;
@@ -313,12 +331,6 @@ function App() {
   const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState("");
-  const [micEnabled, setMicEnabled] = useState(false);
-  const [camEnabled, setCamEnabled] = useState(false);
-  const [screenSharing, setScreenSharing] = useState(false);
-  const [mediaError, setMediaError] = useState("");
-  const [localVideoStream, setLocalVideoStream] = useState<MediaStream | null>(null);
-  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
 
   // Workspace states
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -1184,14 +1196,7 @@ function App() {
     peersRef.current.delete(peerId);
     const remainingOpen = openConnectionCount(channelsRef.current.values());
     setPeersCount(remainingOpen);
-    if (remoteStreamsMapRef.current.delete(peerId)) {
-      setRemoteStreams((current) => {
-        if (!(peerId in current)) return current;
-        const next = { ...current };
-        delete next[peerId];
-        return next;
-      });
-    }
+    removePeerMedia(peerId);
     if (remainingOpen === 0) {
       clearNoteResyncTimer();
       setNoteResyncing(false);
@@ -1205,7 +1210,7 @@ function App() {
       delete next[peerId];
       return next;
     });
-  }, [token, clearNoteResyncTimer]);
+  }, [token, clearNoteResyncTimer, removePeerMedia]);
 
   const setupDataChannel = useCallback((peerId: string, channel: RTCDataChannel, targetRoomId: string) => {
     channelsRef.current.set(peerId, channel);
@@ -1430,48 +1435,7 @@ function App() {
       };
 
       peer.ondatachannel = ({ channel }) => setupDataChannel(peerId, channel, targetRoomId);
-      peer.ontrack = (event) => {
-        if (peersRef.current.get(peerId) !== peer || activeRoomRef.current?.id !== targetRoomId) return;
-        let peerStream = remoteStreamsMapRef.current.get(peerId);
-        if (!peerStream) {
-          peerStream = new MediaStream();
-          remoteStreamsMapRef.current.set(peerId, peerStream);
-        }
-        const incomingTrack = event.track;
-        const existingSameKind = peerStream
-          .getTracks()
-          .filter((track) => track.kind === incomingTrack.kind && track.id !== incomingTrack.id);
-        for (const oldTrack of existingSameKind) {
-          peerStream.removeTrack(oldTrack);
-        }
-        if (!peerStream.getTracks().some((track) => track.id === incomingTrack.id)) {
-          peerStream.addTrack(incomingTrack);
-        }
-        const snapshotStream = new MediaStream(peerStream.getTracks());
-        remoteStreamsMapRef.current.set(peerId, snapshotStream);
-        setRemoteStreams((current) => ({ ...current, [peerId]: snapshotStream }));
-
-        incomingTrack.onended = () => {
-          const cur = remoteStreamsMapRef.current.get(peerId);
-          if (!cur) return;
-          cur.removeTrack(incomingTrack);
-          const nextStream = new MediaStream(cur.getTracks());
-          remoteStreamsMapRef.current.set(peerId, nextStream);
-          setRemoteStreams((prev) => ({ ...prev, [peerId]: nextStream }));
-        };
-      };
-
-      const activeAudio = localMediaStreamRef.current?.getAudioTracks()[0] ?? null;
-      const activeScreenVideo = localScreenStreamRef.current?.getVideoTracks()[0] ?? null;
-      const activeCamVideo = localMediaStreamRef.current?.getVideoTracks()[0] ?? null;
-      const activeVideo = activeScreenVideo ?? activeCamVideo;
-      if (activeAudio && localMediaStreamRef.current) {
-        peer.addTrack(activeAudio, localMediaStreamRef.current);
-      }
-      if (activeVideo) {
-        const videoOwner = activeScreenVideo ? localScreenStreamRef.current : localMediaStreamRef.current;
-        if (videoOwner) peer.addTrack(activeVideo, videoOwner);
-      }
+      attachPeerMediaHandlers(peer, peerId, targetRoomId);
       peer.onnegotiationneeded = () => {
         if (peersRef.current.get(peerId) === peer && peer.connectionState !== "closed") {
           void negotiateForPeer(peerId, targetRoomId, false);
@@ -1532,7 +1496,7 @@ function App() {
         peerCreatePromisesRef.current.delete(peerId);
       }
     }
-  }, [closePeer, setupDataChannel, getIceManager, getPeerSignalingRecord, negotiateForPeer]);
+  }, [closePeer, setupDataChannel, getIceManager, getPeerSignalingRecord, negotiateForPeer, attachPeerMediaHandlers]);
 
   const leaveRoom = useCallback((navigate = true) => {
     // Clear verified identities and ICE credential/signaling state before tearing down channels.
@@ -1553,17 +1517,7 @@ function App() {
     peersRef.current.clear();
     activeSocket?.disconnect();
 
-    localMediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    localMediaStreamRef.current = null;
-    localScreenStreamRef.current?.getTracks().forEach((track) => track.stop());
-    localScreenStreamRef.current = null;
-    remoteStreamsMapRef.current.clear();
-    setMicEnabled(false);
-    setCamEnabled(false);
-    setScreenSharing(false);
-    setMediaError("");
-    setLocalVideoStream(null);
-    setRemoteStreams({});
+    stopAllRoomMedia();
 
     noteSharedRef.current = false;
     noteTextRef.current = "";
@@ -1585,7 +1539,7 @@ function App() {
     setRoomError("");
     setActiveTab("meeting");
     railTipStore.set(null);
-  }, [changeRoute, selectedWorkspaceId, railTipStore, clearNoteResyncTimer, applyNoteError, getIceManager]);
+  }, [changeRoute, selectedWorkspaceId, railTipStore, clearNoteResyncTimer, applyNoteError, getIceManager, stopAllRoomMedia]);
 
   const logout = useCallback(() => {
     const refreshTokenToRevoke = localStorage.getItem("bifrost_refresh_token");
@@ -1623,151 +1577,6 @@ function App() {
     setRoomMessage(''); setRoomLoadError(''); setInviteError(''); setWorkspaceError('');
     setDiscardForm(null);setAuthEmail(''); setAuthName(''); setAuthPassword(''); setAuthError(''); setAuthMode('login');
   }, [leaveRoom, userId, changeRoute, railTipStore]);
-
-  const syncTrackToAllPeers = useCallback(
-    async (kind: "audio" | "video", track: MediaStreamTrack | null, ownerStream: MediaStream | null) => {
-      const updates: Promise<void>[] = [];
-      peersRef.current.forEach((peer) => {
-        if (peer.connectionState === "closed") return;
-        const sender = peer.getSenders().find((entry) => entry.track?.kind === kind);
-        if (sender) {
-          updates.push(sender.replaceTrack(track).catch(() => {}));
-        } else if (track && ownerStream) {
-          peer.addTrack(track, ownerStream);
-        }
-      });
-      await Promise.all(updates);
-    },
-    [],
-  );
-
-  const toggleMic = useCallback(async () => {
-    if (activeRoomRef.current?.access === "VIEWER") return;
-    setMediaError("");
-    const existingStream = localMediaStreamRef.current;
-    const existingAudio = existingStream?.getAudioTracks()[0] ?? null;
-
-    if (micEnabled && existingAudio) {
-      existingAudio.stop();
-      existingStream?.removeTrack(existingAudio);
-      setMicEnabled(false);
-      await syncTrackToAllPeers("audio", null, null);
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      const msg = t("meeting.mediaUnsupported");
-      setMediaError(msg);
-      addToast(msg, "error");
-      return;
-    }
-
-    try {
-      const captured = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioTrack = captured.getAudioTracks()[0] ?? null;
-      if (!audioTrack) return;
-      const targetStream = existingStream ?? new MediaStream();
-      targetStream.addTrack(audioTrack);
-      localMediaStreamRef.current = targetStream;
-      setMicEnabled(true);
-      await syncTrackToAllPeers("audio", audioTrack, targetStream);
-    } catch {
-      const msg = t("meeting.mediaPermissionDenied");
-      setMediaError(msg);
-      addToast(msg, "error");
-    }
-  }, [micEnabled, syncTrackToAllPeers, t, addToast]);
-
-  const toggleCam = useCallback(async () => {
-    if (activeRoomRef.current?.access === "VIEWER") return;
-    setMediaError("");
-    const existingStream = localMediaStreamRef.current;
-    const existingVideo = existingStream?.getVideoTracks()[0] ?? null;
-
-    if (camEnabled && existingVideo) {
-      existingVideo.stop();
-      existingStream?.removeTrack(existingVideo);
-      setCamEnabled(false);
-      if (!localScreenStreamRef.current) {
-        setLocalVideoStream(null);
-        await syncTrackToAllPeers("video", null, null);
-      }
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      const msg = t("meeting.mediaUnsupported");
-      setMediaError(msg);
-      addToast(msg, "error");
-      return;
-    }
-
-    try {
-      const captured = await navigator.mediaDevices.getUserMedia({ video: true });
-      const videoTrack = captured.getVideoTracks()[0] ?? null;
-      if (!videoTrack) return;
-      const targetStream = existingStream ?? new MediaStream();
-      targetStream.addTrack(videoTrack);
-      localMediaStreamRef.current = targetStream;
-      setCamEnabled(true);
-      if (!localScreenStreamRef.current) {
-        setLocalVideoStream(new MediaStream([videoTrack]));
-        await syncTrackToAllPeers("video", videoTrack, targetStream);
-      }
-    } catch {
-      const msg = t("meeting.mediaPermissionDenied");
-      setMediaError(msg);
-      addToast(msg, "error");
-    }
-  }, [camEnabled, syncTrackToAllPeers, t, addToast]);
-
-  const stopScreenShareInternal = useCallback(async () => {
-    const screenStream = localScreenStreamRef.current;
-    if (screenStream) {
-      screenStream.getTracks().forEach((track) => track.stop());
-      localScreenStreamRef.current = null;
-    }
-    setScreenSharing(false);
-    const camTrack = localMediaStreamRef.current?.getVideoTracks()[0] ?? null;
-    if (camTrack && localMediaStreamRef.current) {
-      setLocalVideoStream(new MediaStream([camTrack]));
-      await syncTrackToAllPeers("video", camTrack, localMediaStreamRef.current);
-    } else {
-      setLocalVideoStream(null);
-      await syncTrackToAllPeers("video", null, null);
-    }
-  }, [syncTrackToAllPeers]);
-
-  const toggleScreenShare = useCallback(async () => {
-    if (activeRoomRef.current?.access === "VIEWER") return;
-    setMediaError("");
-    if (screenSharing || localScreenStreamRef.current) {
-      await stopScreenShareInternal();
-      return;
-    }
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      const msg = t("meeting.mediaUnsupported");
-      setMediaError(msg);
-      addToast(msg, "error");
-      return;
-    }
-    try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0] ?? null;
-      if (!screenTrack) return;
-      localScreenStreamRef.current = screenStream;
-      screenTrack.onended = () => {
-        void stopScreenShareInternal();
-      };
-      setScreenSharing(true);
-      setLocalVideoStream(screenStream);
-      await syncTrackToAllPeers("video", screenTrack, screenStream);
-    } catch {
-      const msg = t("meeting.mediaPermissionDenied");
-      setMediaError(msg);
-      addToast(msg, "error");
-    }
-  }, [screenSharing, stopScreenShareInternal, syncTrackToAllPeers, t, addToast]);
 
   const submitChangePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

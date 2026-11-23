@@ -1,9 +1,9 @@
 // Development-only UI fixture. No real peers or external network traffic.
 import { useCallback, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { FileShare, type FileShareMessage } from '../src/components/FileShare'
+import { FileShare, type FileShareMessage } from '../src/features/room/components/FileShare'
 import type { VerifiedPeerIdentity } from '../src/lib/peerIdentity'
-import { MeetingTab } from '../src/components/MeetingTab'
+import { MeetingTab } from '../src/features/room/components/MeetingTab'
 import { translate } from '../src/i18n'
 import '../src/index.css'
 import '../src/styles/index.css'

@@ -14,41 +14,47 @@ Tài liệu này giúp bạn học toàn bộ code của dự án **Bifrost** th
    - `workspaces` & `workspace_members`: không gian làm việc và vai trò `OWNER` / `MEMBER`.
    - `rooms`, `room_members`, `room_roles`: phòng họp, phân quyền chi tiết cấp phòng (`HOST`, `MODERATOR`, `MEMBER`, `VIEWER`) và nhãn tùy chỉnh.
 2. [`server/src/lib/auth.ts`](server/src/lib/auth.ts) — Tạo/kiểm tra Access JWT (ngắn hạn, mặc định `15m`) và sinh Refresh Token ngẫu nhiên 48-byte.
-3. [`server/src/routes/auth.ts`](server/src/routes/auth.ts) — Các API `/register`, `/login`, `/refresh` (có **replay detection**: dùng lại token cũ sẽ thu hồi toàn bộ phiên của user), `/logout`, `/change-password`, `/me`, `/profile`.
+3. **Luồng MVC Xác thực**:
+   - Route [`server/src/routes/auth.ts`](server/src/routes/auth.ts) → Controller [`server/src/controllers/auth.controller.ts`](server/src/controllers/auth.controller.ts) → Service [`server/src/services/auth.service.ts`](server/src/services/auth.service.ts) xử lý `/register`, `/login`, `/refresh` (có **replay detection**: dùng lại token cũ sẽ thu hồi toàn bộ phiên của user), `/logout`, `/change-password`, `/me`, `/profile`.
 4. [`server/src/lib/rateLimit.ts`](server/src/lib/rateLimit.ts) — Chống brute-force đăng nhập, chống spoofing `X-Forwarded-For`.
 
 ### Chặng 2: REST API Nghiệp vụ Workspace & Phòng họp (Khoảng 1–2 giờ)
-1. [`server/src/routes/workspaces.ts`](server/src/routes/workspaces.ts) — Toàn bộ CRUD Workspace, mời/xóa thành viên, tạo/sửa/xóa phòng, gán vai trò phòng (`PATCH /:workspaceId/members/:userId`), và quản lý nhãn (`roles`). Chú ý cách kiểm tra quyền để **Moderator không thể nâng quyền lên Host/Moderator**.
-2. [`server/src/routes/rooms.ts`](server/src/routes/rooms.ts) — Lấy chi tiết phòng kèm `access` thực tế của người gọi.
+1. **Luồng MVC Workspace**:
+   - [`server/src/routes/workspaces.ts`](server/src/routes/workspaces.ts) → [`server/src/controllers/workspace.controller.ts`](server/src/controllers/workspace.controller.ts) → [`server/src/services/workspace.service.ts`](server/src/services/workspace.service.ts): Toàn bộ CRUD Workspace, mời/xóa thành viên, tạo/sửa/xóa phòng, gán vai trò phòng (`PATCH /:workspaceId/members/:userId`), và quản lý nhãn (`roles`). Chú ý cách kiểm tra quyền để **Moderator không thể nâng quyền lên Host/Moderator**.
+2. **Luồng MVC Phòng họp**:
+   - [`server/src/routes/rooms.ts`](server/src/routes/rooms.ts) → [`server/src/controllers/room.controller.ts`](server/src/controllers/room.controller.ts) → [`server/src/services/room.service.ts`](server/src/services/room.service.ts): Lấy chi tiết phòng kèm `access` thực tế của người gọi.
 3. [`server/src/lib/validation.ts`](server/src/lib/validation.ts) — Middleware chặn UUID sai định dạng trước khi chạm vào PostgreSQL.
 
 ### Chặng 3: Tầng Signaling Realtime & Bảo mật WebRTC (Khoảng 2 giờ)
-1. [`server/src/index.ts`](server/src/index.ts) — Trọng tâm của Socket.IO:
+1. [`server/src/sockets/room.socket.ts`](server/src/sockets/room.socket.ts) (khởi tạo từ [`server/src/index.ts`](server/src/index.ts)) — Trọng tâm của Socket.IO:
    - Handshake xác thực JWT trước khi cho socket kết nối.
    - Sự kiện `room:join`: kiểm tra quyền Workspace **và** quyền cấp Room (`room_members`), xử lý idempotent khi reconnect để không phát trùng `peer-joined`.
    - Chuyển tiếp `webrtc:offer`, `webrtc:answer`, `webrtc:ice-candidate` **chỉ khi 2 socket đang ở chung phòng** (`findSharedRoom`).
 2. [`server/src/lib/revocation.ts`](server/src/lib/revocation.ts) — Thu hồi phiên Socket.IO ngay lập tức (`room:access-revoked`) khi thành viên bị xóa khỏi workspace/phòng hoặc phòng bị xóa.
 3. [`server/src/lib/turn.ts`](server/src/lib/turn.ts) & [`server/src/routes/turn.ts`](server/src/routes/turn.ts) — Cấp credential TURN tạm thời ký bằng HMAC-SHA1 cho `coturn` (không lộ secret ra client).
 
-### Chặng 4: Lõi WebRTC P2P phía Client (Khoảng 2–3 giờ)
+### Chặng 4: Lõi WebRTC P2P & Custom Hooks phía Client (Khoảng 2–3 giờ)
 Đọc phần này để hiểu cách 2 trình duyệt nối thẳng P2P với nhau:
 1. [`client/src/lib/peerSignaling.ts`](client/src/lib/peerSignaling.ts) — Thuật toán **Perfect Negotiation** (`polite` vs `impolite` peer) giúp 2 máy không bị đụng độ khi cùng gửi offer, cộng hàng đợi ICE candidate và tự phục hồi khi rớt mạng.
 2. [`client/src/lib/peerIdentity.ts`](client/src/lib/peerIdentity.ts) — Xác minh danh tính người gửi trên DataChannel dựa vào `peerId` thật của kết nối, chặn giả mạo `author` và chặn `VIEWER` gửi tin nhắn/thẻ ghi chú.
 3. [`client/src/lib/iceConfig.ts`](client/src/lib/iceConfig.ts) — Quản lý vòng đời ICE servers và tự làm mới credential TURN trước khi hết hạn.
 4. [`client/src/lib/fileTransfer.ts`](client/src/lib/fileTransfer.ts) — Chia file (tối đa 10 MB) thành các chunk 16 KB, điều tiết luồng (`bufferedAmount`), ghép Blob và xác nhận `file:ack` / `file:reject`.
-5. [`client/src/App.tsx`](client/src/App.tsx) — Nơi ghép nối Socket.IO + `RTCPeerConnection` + `RTCDataChannel` + MediaStream (`getUserMedia` / `getDisplayMedia` / `ontrack` / `replaceTrack`) + Refresh Token ngầm.
+5. [`client/src/features/room/hooks/useRoomMedia.ts`](client/src/features/room/hooks/useRoomMedia.ts) — Custom hook quản lý trọn vẹn MediaStream (Mic, Camera, Screen Share, `ontrack`, `replaceTrack`).
+6. [`client/src/App.tsx`](client/src/App.tsx) — Nơi ghép nối Socket.IO + `RTCPeerConnection` + `RTCDataChannel` + `useRoomMedia` + Refresh Token ngầm.
 
-### Chặng 5: Giao diện React, Đa ngôn ngữ & Triển khai (Khoảng 2 giờ)
-1. **Thành phần phòng họp** trong [`client/src/components/`](client/src/components/):
-   - [`MeetingTab.tsx`](client/src/components/MeetingTab.tsx): Sân khấu gọi Audio/Video/Chia sẻ màn hình + khung vòm *Botanical Atelier*.
-   - [`MeetingBoard.tsx`](client/src/components/MeetingBoard.tsx): Bảng Kanban 4 cột đồng bộ P2P + kéo thả pointer.
-   - [`ChatPane.tsx`](client/src/components/ChatPane.tsx), [`NotesPane.tsx`](client/src/components/NotesPane.tsx), [`FileShare.tsx`](client/src/components/FileShare.tsx): Giao tiếp P2P qua DataChannel.
-   - [`WorkspaceMembers.tsx`](client/src/components/WorkspaceMembers.tsx): Danh bạ thành viên, lọc theo nhóm, phân quyền phòng và nhãn.
+### Chặng 5: Giao diện React theo Feature, Đa ngôn ngữ & Triển khai (Khoảng 2 giờ)
+1. **Giao diện chia theo tính năng** trong [`client/src/features/`](client/src/features/) và dùng chung trong [`client/src/shared/`](client/src/shared/):
+   - [`features/room/components/MeetingTab.tsx`](client/src/features/room/components/MeetingTab.tsx): Sân khấu gọi Audio/Video/Chia sẻ màn hình + khung vòm *Botanical Atelier*.
+   - [`features/room/components/MeetingBoard.tsx`](client/src/features/room/components/MeetingBoard.tsx) & [`features/room/hooks/useBoardPointerDrag.ts`](client/src/features/room/hooks/useBoardPointerDrag.ts): Bảng Kanban 4 cột đồng bộ P2P + kéo thả pointer.
+   - [`features/room/components/ChatPane.tsx`](client/src/features/room/components/ChatPane.tsx), [`NotesPane.tsx`](client/src/features/room/components/NotesPane.tsx), [`FileShare.tsx`](client/src/features/room/components/FileShare.tsx): Giao tiếp P2P qua DataChannel.
+   - [`features/workspace/WorkspaceMembers.tsx`](client/src/features/workspace/WorkspaceMembers.tsx), [`WorkspaceSwitcher.tsx`](client/src/features/workspace/WorkspaceSwitcher.tsx), [`RoomLabelsEditor.tsx`](client/src/features/workspace/RoomLabelsEditor.tsx): Danh bạ thành viên, lọc theo nhóm, phân quyền phòng và nhãn.
+   - [`features/auth/`](client/src/features/auth/): Đăng nhập, đăng ký, onboarding hồ sơ.
+   - [`shared/components/`](client/src/shared/components/) & [`shared/hooks/`](client/src/shared/hooks/): Các UI dùng chung (`UserAvatar`, `ConfirmDialog`, `Toast`, `SelectMenu`, `useDialogFocus`, `useDelayedLoading`).
 2. **Đa ngôn ngữ (`i18n`)**: [`client/src/i18n/`](client/src/i18n/) kèm bài kiểm thử AST [`client/dev/i18n.test.mjs`](client/dev/i18n.test.mjs) tự động quét code để đảm bảo không có chữ cứng chưa dịch và không có key thừa.
 3. **Hạ tầng triển khai**: [`docker-compose.prod.yml`](docker-compose.prod.yml), [`docker/Caddyfile`](docker/Caddyfile) (HTTPS tự động), [`client/nginx.conf`](client/nginx.conf).
 
 ---
 
 ## 2. Mẹo đọc nhanh khi học lại code
-- **Muốn xem luồng 1 nút bấm chạy đi đâu**: Tìm tên hàm trong `client/src/App.tsx` (ví dụ `joinRoom`, `toggleMic`, `sendMessage`) rồi lần theo các file trong `client/src/lib/` và route tương ứng ở `server/src/routes/`.
+- **Muốn xem luồng 1 nút bấm chạy đi đâu**: Tìm tên hàm trong `client/src/App.tsx` hoặc hook trong `client/src/features/room/hooks/` (ví dụ `joinRoom`, `toggleMic`, `sendMessage`) rồi lần theo `client/src/lib/` và route → controller → service tương ứng ở `server/src/`.
 - **Muốn xem kịch bản chuẩn của toàn hệ thống**: Đọc [`server/tests/test_stage5.mjs`](server/tests/test_stage5.mjs) — file này mô phỏng trọn vẹn từ lúc đăng ký, tạo workspace/room, nối Socket.IO, bắt tay WebRTC, đến lúc bị thu hồi quyền và xoay vòng Refresh Token.
