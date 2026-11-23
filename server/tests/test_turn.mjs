@@ -13,7 +13,7 @@ import { ZodError } from "zod";
 process.env.JWT_SECRET ??= "unit-test-jwt-secret-only";
 process.env.DATABASE_URL ??= "postgresql://unused:unused@127.0.0.1:5432/unused";
 
-const { createAccessToken } = await import("./dist/lib/auth.js");
+const { createAccessToken } = await import("../dist/lib/auth.js");
 const {
   DEFAULT_STUN_URLS,
   DEFAULT_TURN_TTL_SECONDS,
@@ -25,9 +25,9 @@ const {
   parseIceUrlList,
   parseTurnTtlSeconds,
   readTurnSharedSecretFile,
-} = await import("./dist/lib/turn.js");
-const { createTurnRouterBundle } = await import("./dist/routes/turn.js");
-const { RATE_LIMIT_EXPOSED_HEADERS } = await import("./dist/lib/rateLimit.js");
+} = await import("../dist/lib/turn.js");
+const { createTurnRouterBundle } = await import("../dist/routes/turn.js");
+const { RATE_LIMIT_EXPOSED_HEADERS } = await import("../dist/lib/rateLimit.js");
 
 const VALID_USER_A = "11111111-1111-4111-8111-111111111111";
 const VALID_USER_B = "22222222-2222-4222-8222-222222222222";

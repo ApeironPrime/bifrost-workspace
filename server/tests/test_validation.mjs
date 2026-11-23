@@ -6,11 +6,11 @@ import { ZodError } from "zod";
 process.env.JWT_SECRET ??= "unit-test-jwt-secret-only";
 process.env.DATABASE_URL ??= "postgresql://unused:unused@127.0.0.1:5432/unused";
 
-const { createAccessToken } = await import("./dist/lib/auth.js");
-const { Prisma } = await import("./dist/generated/prisma/client.js");
-const { isPrismaRecordNotFoundError } = await import("./dist/lib/validation.js");
-const { createWorkspaceRouter } = await import("./dist/routes/workspaces.js");
-const { createRoomRouter } = await import("./dist/routes/rooms.js");
+const { createAccessToken } = await import("../dist/lib/auth.js");
+const { Prisma } = await import("../dist/generated/prisma/client.js");
+const { isPrismaRecordNotFoundError } = await import("../dist/lib/validation.js");
+const { createWorkspaceRouter } = await import("../dist/routes/workspaces.js");
+const { createRoomRouter } = await import("../dist/routes/rooms.js");
 
 const VALID_OWNER_ID = "11111111-1111-4111-8111-111111111111";
 const VALID_MEMBER_ID = "22222222-2222-4222-8222-222222222222";

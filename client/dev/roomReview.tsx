@@ -1,7 +1,7 @@
 // Development-only UI fixture. No real peers or external network traffic.
 import { useCallback, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { FileShare, type FileShareMessage } from '../src/FileShare'
+import { FileShare, type FileShareMessage } from '../src/components/FileShare'
 import type { VerifiedPeerIdentity } from '../src/lib/peerIdentity'
 import { MeetingTab } from '../src/components/MeetingTab'
 import { translate } from '../src/i18n'
@@ -51,7 +51,7 @@ export function Fixture() {
       <span role="status">{feedback}</span>
     </header>
     <main style={{ flex:1,minHeight:0,overflow:'auto' }}>
-      {meeting ? <MeetingTab currentUserId="me" currentUserName="Local QA" roomName="QA Room" onlinePeers={Array.from({length:5},(_,i)=>({peerId:`p${i}`,userId:`u${i}`,name:`Remote participant ${i+1} with a long name`,email:`p${i}@example.test`}))} onLeaveRoom={() => setMeeting(false)} onCopyRoomId={() => {}} copiedRoomId={false} t={(key,params)=>translate('en',key,params)} />
+      {meeting ? <MeetingTab currentUserId="me" currentUserName="Local QA" roomName="QA Room" onlinePeers={Array.from({length:5},(_,i)=>({peerId:`p${i}`,userId:`u${i}`,name:`Remote participant ${i+1} with a long name`,email:`p${i}@example.test`}))} micEnabled={false} camEnabled={false} screenSharing={false} localVideoStream={null} remoteStreams={{}} onToggleMic={() => {}} onToggleCam={() => {}} onToggleScreenShare={() => {}} onLeaveRoom={() => setMeeting(false)} onCopyRoomId={() => {}} copiedRoomId={false} t={(key,params)=>translate('en',key,params)} />
         : <FileShare readOnly={readOnly} roomId="qa-room" peersCount={1} onlinePeerIds={new Set(['peer-qa'])} channelsRef={transport} broadcast={send} sendDirect={sendDirect} registerMessageHandler={register} onSuccessToast={setFeedback} onErrorToast={setFeedback} t={(key,params)=>translate('en',key,params)} />}
     </main>
   </div>

@@ -22,7 +22,7 @@ const {
   parsePositiveIntSetting,
   parseTrustProxySetting,
   readAuthRateLimitSettings,
-} = await import("./dist/lib/rateLimit.js");
+} = await import("../dist/lib/rateLimit.js");
 
 const credentialsSchema = z.object({
   email: z.string().trim().email().max(254),

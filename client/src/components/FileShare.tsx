@@ -21,9 +21,9 @@ import {
   type OutboundTransfer,
   type OutboundTransferRecipientState,
   type ReceivedFile,
-} from "./lib/fileTransfer";
-import { hasMatchingVerifiedPeer, type VerifiedPeerIdentity } from "./lib/peerIdentity";
-import type { I18nKey } from "./i18n";
+} from "../lib/fileTransfer";
+import { hasMatchingVerifiedPeer, type VerifiedPeerIdentity } from "../lib/peerIdentity";
+import type { I18nKey } from "../i18n";
 
 export type FileShareMessage =
   | {

@@ -1,11 +1,11 @@
-import { CardMoveMenu, type BoardColumnOption, type CardMoveMenuLabels } from './components/CardMoveMenu'
-import { ConfirmDialog } from './components/ConfirmDialog'
-import { MotionPresence } from './components/MotionPresence'
-import { SelectMenu } from './components/SelectMenu'
-import { UserAvatar } from './components/UserAvatar'
-import type { SelectItem } from './lib/selectOptions'
-import { useBoardPointerDrag } from './lib/useBoardPointerDrag'
-import { useDialogFocus } from './lib/useDialogFocus'
+import { CardMoveMenu, type BoardColumnOption, type CardMoveMenuLabels } from './CardMoveMenu'
+import { ConfirmDialog } from './ConfirmDialog'
+import { MotionPresence } from './MotionPresence'
+import { SelectMenu } from './SelectMenu'
+import { UserAvatar } from './UserAvatar'
+import type { SelectItem } from '../lib/selectOptions'
+import { useBoardPointerDrag } from '../lib/useBoardPointerDrag'
+import { useDialogFocus } from '../lib/useDialogFocus'
 import {
   applyLocalBoardMessage,
   applyPeerBoardMessage,
@@ -31,8 +31,8 @@ import {
   type BoardTombstone,
   type MeetingBoardItem,
   type MeetingBoardMessage,
-} from './lib/roomUiState'
-import type { VerifiedPeerIdentity } from './lib/peerIdentity'
+} from '../lib/roomUiState'
+import type { VerifiedPeerIdentity } from '../lib/peerIdentity'
 import {
   memo,
   useCallback,
@@ -57,10 +57,10 @@ import {
   CheckSquare,
   Square,
 } from "lucide-react";
-import { LOCALE_META, translate, type I18nKey, type Language } from "./i18n";
-import type { ToastType } from "./components/Toast";
+import { LOCALE_META, translate, type I18nKey, type Language } from "../i18n";
+import type { ToastType } from "./Toast";
 
-export type { BoardItemKind, MeetingBoardItem, MeetingBoardMessage } from './lib/roomUiState';
+export type { BoardItemKind, MeetingBoardItem, MeetingBoardMessage } from '../lib/roomUiState';
 
 interface MeetingBoardProps {
   readOnly?: boolean;

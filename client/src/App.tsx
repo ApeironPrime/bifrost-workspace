@@ -67,8 +67,8 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
-import { MeetingBoard, type MeetingBoardMessage } from "./MeetingBoard";
-import { FileShare, type FileShareMessage } from "./FileShare";
+import { MeetingBoard, type MeetingBoardMessage } from "./components/MeetingBoard";
+import { FileShare, type FileShareMessage } from "./components/FileShare";
 import { MeetingTab } from "./components/MeetingTab";
 import { ToastContainer, type ToastItem, type ToastType } from "./components/Toast";
 import {

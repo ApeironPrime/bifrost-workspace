@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import "dotenv/config";
 import pg from "pg";
-import { io as ClientSocket } from "../client/node_modules/socket.io-client/build/esm/index.js";
+import { io as ClientSocket } from "../../client/node_modules/socket.io-client/build/esm/index.js";
 
 const PORT = 3456;
 const BASE_URL = `http://localhost:${PORT}/api`;
