@@ -355,3 +355,83 @@ test("PATCH /workspaces/:wsId/members/:userId enforces moderator escalation guar
     { onRoomAccessRevoked: (event) => revokedEvents.push(event) },
   );
 });
+
+test("room collab and my-note routes validate UUIDs and isolate private notes & VIEWER writes", async () => {
+  const viewerToken = createAccessToken({ id: VALID_MEMBER_ID, email: "viewer@example.com" });
+
+  await withServer(
+    {
+      room: {
+        findUnique: async () => ({
+          id: VALID_ROOM_ID,
+          workspaceId: VALID_WS_ID,
+          hostId: VALID_OWNER_ID,
+          host: { id: VALID_OWNER_ID, name: "Owner", email: "owner@example.com" },
+          workspace: { id: VALID_WS_ID, name: "WS", slug: "ws" },
+        }),
+      },
+      workspaceMember: {
+        findUnique: async ({ where }) => ({
+          workspaceId: VALID_WS_ID,
+          userId: where.workspaceId_userId.userId,
+          role: where.workspaceId_userId.userId === VALID_OWNER_ID ? "OWNER" : "MEMBER",
+        }),
+      },
+      roomMember: {
+        findUnique: async ({ where }) => {
+          const uid = where.workspaceId_roomId_userId.userId;
+          return uid === VALID_MEMBER_ID
+            ? { workspaceId: VALID_WS_ID, roomId: VALID_ROOM_ID, userId: uid, role: "VIEWER", labelIds: [] }
+            : null;
+        },
+      },
+      roomCollabState: {
+        findUnique: async () => ({
+          roomId: VALID_ROOM_ID,
+          messagesJson: [{ id: "m1", author: "Owner", authorId: VALID_OWNER_ID, body: "Hi", mine: false }],
+          boardJson: { items: [], tombstones: {} },
+          sharedNotesJson: {},
+          hlc: null,
+        }),
+      },
+      userRoomNote: {
+        findUnique: async ({ where }) => {
+          // Only returns note belonging to caller
+          if (where.roomId_userId.userId === VALID_OWNER_ID) {
+            return { roomId: VALID_ROOM_ID, userId: VALID_OWNER_ID, body: "Secret", isShared: false, updatedAtMs: 1000, hlc: null };
+          }
+          return null;
+        },
+      },
+    },
+    async ({ api, calls }) => {
+      // Malformed roomId fails before touching Prisma
+      const badGet = await api("/rooms/not-a-uuid/collab");
+      assert.equal(badGet.status, 400);
+      const badNote = await api("/rooms/not-a-uuid/my-note", { method: "PUT", body: { body: "x", isShared: false } });
+      assert.equal(badNote.status, 400);
+      assert.equal(calls.length, 0);
+
+      // VIEWER can read collab snapshot, gets only their own null myNote (never Owner's private note)
+      const viewerGet = await api(`/rooms/${VALID_ROOM_ID}/collab`, { token: viewerToken });
+      assert.equal(viewerGet.status, 200);
+      assert.equal(viewerGet.data?.messages?.length, 1);
+      assert.equal(viewerGet.data?.myNote, null);
+
+      // VIEWER cannot write collab or my-note
+      const viewerPutCollab = await api(`/rooms/${VALID_ROOM_ID}/collab`, {
+        method: "PUT",
+        token: viewerToken,
+        body: { messages: [] },
+      });
+      assert.equal(viewerPutCollab.status, 403);
+
+      const viewerPutNote = await api(`/rooms/${VALID_ROOM_ID}/my-note`, {
+        method: "PUT",
+        token: viewerToken,
+        body: { body: "Hacked", isShared: true },
+      });
+      assert.equal(viewerPutNote.status, 403);
+    },
+  );
+});

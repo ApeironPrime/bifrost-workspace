@@ -12,7 +12,8 @@ import {
   syncEmptyTabPanelTabIndex,
   type RoomTabId,
 } from './lib/roomTabs'
-import { readWorkspaceRoute, workspaceHash, roomDraftKey, readRoomDraft, readRoomNoteUpdatedAt, type WorkspaceRoute } from './lib/roomUiState'
+import { readWorkspaceRoute, workspaceHash, roomDraftKey, readRoomDraft, readRoomNoteUpdatedAt, type BoardState, type WorkspaceRoute } from './lib/roomUiState'
+import { HybridLogicalClock, isIncomingNewer } from './lib/hlc'
 import {
   authorizeSignalingPeer,
   clearPeerRegistry,
@@ -26,6 +27,8 @@ import {
   type WorkspaceMemberAccessRecord,
 } from './lib/peerIdentity'
 import {
+  applyChatPin,
+  applyChatReaction,
   buildNoteResyncEnvelope,
   buildNoteUnshareEnvelope,
   buildNoteUpdateEnvelope,
@@ -33,8 +36,15 @@ import {
   deriveNoteShareStatus,
   normalizeIncomingChatMessage,
   normalizeIncomingSharedNote,
+  readRoomChatCache,
+  reconcileChatMessages,
+  roomChatCacheKey,
+  writeRoomChatCache,
+  type ChatActionDataEnvelope,
   type ChatDataEnvelope,
   type ChatMessageItem,
+  type ChatReplySummary,
+  type ChatSyncDataEnvelope,
   type NoteDataEnvelope,
   type SharedNoteItem,
 } from './lib/chatNotes'
@@ -121,7 +131,7 @@ import { useDelayedLoading } from './shared/hooks/useDelayedLoading';
 import { searchKey } from './lib/selectOptions';
 import { WorkspaceLoadingScreen } from './features/workspace/WorkspaceLoadingScreen';
 import { withCurrentUserHost } from './lib/roomHostProfile';
-import { canSendToRoom, openConnectionCount } from './lib/roomControls';
+import { canComposeRoomMessage, openConnectionCount } from './lib/roomControls';
 import { useDialogFocus } from './shared/hooks/useDialogFocus';
 import {
   getSessionStatusDisplay,
@@ -155,6 +165,8 @@ type ChatMessage = ChatMessageItem;
 type SharedNote = SharedNoteItem;
 type DataEnvelope =
   | ChatDataEnvelope
+  | ChatActionDataEnvelope
+  | ChatSyncDataEnvelope
   | NoteDataEnvelope
   | MeetingBoardMessage
   | FileShareMessage;
@@ -283,6 +295,10 @@ function App() {
     }
     return stored;
   });
+  const tokenRef = useRef(token);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   useEffect(() => {
     if (isDevMockSession(token)) {
@@ -422,6 +438,15 @@ function App() {
   });
   const [peersCount, setPeersCount] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const [cloudBoard, setCloudBoard] = useState<{ data: BoardState; version: number } | null>(null);
+  const [hydratedNote, setHydratedNote] = useState<{ body: string; updatedAt?: number; version: number } | null>(null);
+  const userIdRef = useRef("");
+  const hlcRef = useRef(new HybridLogicalClock('anon'));
+  const noteHlcRef = useRef<string | undefined>(undefined);
+  const boardBackupRef = useRef<BoardState | null>(null);
+  const collabSaveTimerRef = useRef<number | null>(null);
+  const noteSaveTimerRef = useRef<number | null>(null);
   const [noteShared, setNoteShared] = useState(false);
   const [noteResyncing, setNoteResyncing] = useState(false);
   const [sharedNotes, setSharedNotes] = useState<Record<string, SharedNote>>({});
@@ -478,9 +503,91 @@ function App() {
   );
 
   const addMessage = useCallback(
-    (message: Omit<ChatMessage, "id">) =>
-      setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }]),
+    (message: Omit<ChatMessage, "id"> & { id?: string }) => {
+      const nextMsg: ChatMessage = {
+        ...message,
+        id: message.id && message.id.trim() ? message.id : crypto.randomUUID(),
+      };
+      setMessages((current) => {
+        const merged = reconcileChatMessages(
+          current,
+          [nextMsg],
+          userIdRef.current,
+          tRef.current("chat.you"),
+        );
+        messagesRef.current = merged;
+        const room = activeRoomRef.current;
+        if (room && userIdRef.current) {
+          writeRoomChatCache(
+            localStorage,
+            roomChatCacheKey(userIdRef.current, room.workspaceId, room.id),
+            merged,
+          );
+        }
+        return merged;
+      });
+    },
     [],
+  );
+
+  const scheduleCollabBackup = useCallback((roomId: string) => {
+    if (!roomId || !tokenRef.current || activeRoomRef.current?.access === "VIEWER") return;
+    if (collabSaveTimerRef.current !== null) {
+      window.clearTimeout(collabSaveTimerRef.current);
+    }
+    collabSaveTimerRef.current = window.setTimeout(() => {
+      collabSaveTimerRef.current = null;
+      if (!tokenRef.current || activeRoomRef.current?.id !== roomId || activeRoomRef.current?.access === "VIEWER") {
+        return;
+      }
+      void fetchAppApi(apiUrl(`/rooms/${roomId}/collab`), {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${tokenRef.current}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: messagesRef.current,
+          ...(boardBackupRef.current ? { board: boardBackupRef.current } : {}),
+          hlc: hlcRef.current.now(),
+        }),
+      }).catch(() => {});
+    }, 800);
+  }, []);
+
+  const scheduleNoteBackup = useCallback((roomId: string) => {
+    if (!roomId || !tokenRef.current || activeRoomRef.current?.access === "VIEWER") return;
+    if (noteSaveTimerRef.current !== null) {
+      window.clearTimeout(noteSaveTimerRef.current);
+    }
+    noteSaveTimerRef.current = window.setTimeout(() => {
+      noteSaveTimerRef.current = null;
+      if (!tokenRef.current || activeRoomRef.current?.id !== roomId || activeRoomRef.current?.access === "VIEWER") {
+        return;
+      }
+      void fetchAppApi(apiUrl(`/rooms/${roomId}/my-note`), {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${tokenRef.current}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body: noteTextRef.current,
+          isShared: noteSharedRef.current,
+          updatedAt: noteUpdatedAtRef.current,
+          hlc: noteHlcRef.current,
+        }),
+      }).catch(() => {});
+    }, 800);
+  }, []);
+
+  const handleBoardStateChange = useCallback(
+    (nextBoard: BoardState) => {
+      boardBackupRef.current = nextBoard;
+      const roomId = activeRoomRef.current?.id;
+      if (roomId) scheduleCollabBackup(roomId);
+    },
+    [scheduleCollabBackup],
   );
 
   const broadcast = useCallback((envelope: DataEnvelope) => {
@@ -669,6 +776,10 @@ function App() {
   }, [authReady]);
 
   const userId = user?.id;
+  useEffect(() => {
+    userIdRef.current = userId ?? "";
+    hlcRef.current.setNodeId(userId || "anon");
+  }, [userId]);
   const userName = user?.name;
   const userEmail = user?.email;
   const memoCurrentUser = useMemo(
@@ -1182,11 +1293,6 @@ function App() {
     }
   };
 
-  const tokenRef = useRef(token);
-  useEffect(() => {
-    tokenRef.current = token;
-  }, [token]);
-
   const getIceManager = useCallback((): RoomIceManager => {
     if (!iceManagerRef.current) {
       iceManagerRef.current = createRoomIceManager({
@@ -1270,6 +1376,19 @@ function App() {
           applyNoteError(tRef.current('note.syncFailed'));
         }
       }
+      if (messagesRef.current.length > 0) {
+        try {
+          channel.send(
+            JSON.stringify({
+              type: "chat:sync-state",
+              messages: messagesRef.current,
+              hlc: hlcRef.current.now(),
+            }),
+          );
+        } catch {
+          /* Ignore transient send failures during channel open. */
+        }
+      }
       meetingBoardPeerConnectListenersRef.current.forEach((listener) => listener(peerId));
     };
     channel.onclose = () => {
@@ -1313,16 +1432,104 @@ function App() {
         },
         handlers: {
           onChat: (payload, verifiedSender) => {
+            if (typeof payload.hlc === "string") {
+              hlcRef.current.receive(payload.hlc);
+            }
             const normalized = normalizeIncomingChatMessage(payload, verifiedSender);
             if (normalized) addMessage(normalized);
           },
+          onChatAction: (payload, verifiedSender) => {
+            if (typeof payload.hlc === "string") {
+              hlcRef.current.receive(payload.hlc);
+            }
+            const room = activeRoomRef.current;
+            if (payload.type === "chat:reaction" && typeof payload.messageId === "string" && typeof payload.emoji === "string") {
+              setMessages((current) => {
+                const next = applyChatReaction(
+                  current,
+                  payload.messageId as string,
+                  payload.emoji as string,
+                  verifiedSender.userId,
+                  Boolean(payload.active),
+                );
+                messagesRef.current = next;
+                if (room && userIdRef.current) {
+                  writeRoomChatCache(
+                    localStorage,
+                    roomChatCacheKey(userIdRef.current, room.workspaceId, room.id),
+                    next,
+                  );
+                }
+                return next;
+              });
+            } else if (payload.type === "chat:pin" && typeof payload.messageId === "string") {
+              setMessages((current) => {
+                const next = applyChatPin(
+                  current,
+                  payload.messageId as string,
+                  Boolean(payload.pinned),
+                  verifiedSender.name,
+                );
+                messagesRef.current = next;
+                if (room && userIdRef.current) {
+                  writeRoomChatCache(
+                    localStorage,
+                    roomChatCacheKey(userIdRef.current, room.workspaceId, room.id),
+                    next,
+                  );
+                }
+                return next;
+              });
+            }
+          },
+          onChatSync: (payload) => {
+            if (typeof payload.hlc === "string") {
+              hlcRef.current.receive(payload.hlc);
+            }
+            if (!Array.isArray(payload.messages)) return;
+            const room = activeRoomRef.current;
+            setMessages((current) => {
+              const merged = reconcileChatMessages(
+                current,
+                payload.messages as unknown[],
+                userIdRef.current,
+                tRef.current("chat.you"),
+              );
+              messagesRef.current = merged;
+              if (room && userIdRef.current) {
+                writeRoomChatCache(
+                  localStorage,
+                  roomChatCacheKey(userIdRef.current, room.workspaceId, room.id),
+                  merged,
+                );
+              }
+              return merged;
+            });
+          },
           onNoteUpdate: (verifiedPeerId, payload, verifiedSender) => {
+            if (typeof payload.hlc === "string") {
+              hlcRef.current.receive(payload.hlc);
+            }
             const normalizedNote = normalizeIncomingSharedNote(payload, verifiedSender);
             if (normalizedNote) {
-              setSharedNotes((current) => ({
-                ...current,
-                [verifiedPeerId]: normalizedNote,
-              }));
+              setSharedNotes((current) => {
+                const existing = current[verifiedPeerId];
+                if (
+                  existing &&
+                  !isIncomingNewer(
+                    existing.hlc,
+                    existing.updatedAt,
+                    normalizedNote.hlc,
+                    normalizedNote.updatedAt,
+                  )
+                ) {
+                  return current;
+                }
+                const next = { ...current };
+                delete next[`cloud:${verifiedSender.userId}`];
+                next[verifiedPeerId] = normalizedNote;
+                return next;
+              });
             }
           },
           onNoteUnshared: (verifiedPeerId) => {
@@ -1658,17 +1865,115 @@ function App() {
     const saved = readRoomDraft(sessionStorage,draftKey);
     noteTextRef.current=saved.note;
     noteUpdatedAtRef.current=readRoomNoteUpdatedAt(sessionStorage,draftKey);
+    noteHlcRef.current = undefined;
+    boardBackupRef.current = null;
+    if (collabSaveTimerRef.current !== null) {
+      window.clearTimeout(collabSaveTimerRef.current);
+      collabSaveTimerRef.current = null;
+    }
+    if (noteSaveTimerRef.current !== null) {
+      window.clearTimeout(noteSaveTimerRef.current);
+      noteSaveTimerRef.current = null;
+    }
+    const cachedChat = readRoomChatCache(
+      localStorage,
+      roomChatCacheKey(user!.id, targetRoom.workspaceId, targetRoom.id),
+      user!.id,
+      t("chat.you"),
+    );
+    messagesRef.current = cachedChat;
     if(navigate) changeRoute({workspaceId:targetRoom.workspaceId,roomId:targetRoom.id,tab:'meeting'});
     activeRoomRef.current = targetRoom;
     setCurrentRoom(targetRoom);
     setRoomError("");
     setSessionStatus({ kind: "connectingSignaling" });
-    setMessages([]);
+    setMessages(cachedChat);
+    setCloudBoard(null);
+    setHydratedNote(null);
     setSharedNotes({});
     setOnlinePeers([]);
     setPeersCount(0);
     setActiveTab("meeting");
     setIsSidebarOpen(false);
+
+    if (token) {
+      void fetchAppApi(apiUrl(`/rooms/${targetRoom.id}/collab`), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(async (res) => {
+          if (!res.ok) return null;
+          return res.json() as Promise<{
+            messages?: unknown[];
+            board?: BoardState;
+            sharedNotes?: Record<string, SharedNoteItem>;
+            myNote?: { body: string; isShared: boolean; updatedAt?: number; hlc?: string } | null;
+          }>;
+        })
+        .then((collabData) => {
+          if (!collabData || activeRoomRef.current?.id !== targetRoom.id) return;
+          if (Array.isArray(collabData.messages) && collabData.messages.length > 0) {
+            setMessages((current) => {
+              const merged = reconcileChatMessages(
+                current,
+                collabData.messages!,
+                user!.id,
+                tRef.current("chat.you"),
+              );
+              messagesRef.current = merged;
+              writeRoomChatCache(
+                localStorage,
+                roomChatCacheKey(user!.id, targetRoom.workspaceId, targetRoom.id),
+                merged,
+              );
+              return merged;
+            });
+          }
+          if (collabData.board && (Array.isArray(collabData.board.items) || collabData.board.tombstones)) {
+            boardBackupRef.current = collabData.board;
+            setCloudBoard((prev) => ({
+              data: collabData.board!,
+              version: (prev?.version ?? 0) + 1,
+            }));
+          }
+          if (collabData.sharedNotes && typeof collabData.sharedNotes === "object") {
+            setSharedNotes((current) => {
+              const next = { ...current };
+              const liveAuthorIds = new Set(
+                Object.values(current).map((item) => item.authorId).filter(Boolean),
+              );
+              for (const [uid, note] of Object.entries(collabData.sharedNotes!)) {
+                if (!note || uid === user!.id || liveAuthorIds.has(uid)) continue;
+                next[`cloud:${uid}`] = { ...note, authorId: uid };
+              }
+              return next;
+            });
+          }
+          if (collabData.myNote) {
+            const cloudNote = collabData.myNote;
+            const shouldHydrate =
+              !noteTextRef.current.trim() ||
+              isIncomingNewer(
+                noteHlcRef.current,
+                noteUpdatedAtRef.current,
+                cloudNote.hlc,
+                cloudNote.updatedAt,
+              );
+            if (shouldHydrate) {
+              noteTextRef.current = cloudNote.body;
+              noteUpdatedAtRef.current = cloudNote.updatedAt;
+              noteHlcRef.current = cloudNote.hlc;
+              noteSharedRef.current = Boolean(cloudNote.isShared);
+              setNoteShared(Boolean(cloudNote.isShared));
+              setHydratedNote((prev) => ({
+                body: cloudNote.body,
+                updatedAt: cloudNote.updatedAt,
+                version: (prev?.version ?? 0) + 1,
+              }));
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
     if (isDevMockSession(token)) {
       setOnlinePeers([{ peerId: 'mock-local-peer', userId: user!.id, name: user!.name, email: user!.email }]);
@@ -1964,31 +2269,118 @@ function App() {
     changeRoute({workspaceId,roomId:"",tab:"meeting"});
   }, [selectedWorkspaceId, leaveRoom, changeRoute]);
 
-  const sendMessage = useCallback((draftText: string): boolean => {
+  const sendMessage = useCallback((draftText: string, replyTo?: ChatReplySummary): boolean => {
     if (activeRoomRef.current?.access === 'VIEWER') return false;
-    const payload = createChatOutboundPayload(memberNameRef.current, t("chat.you"), draftText, Date.now(), userId);
+    const msgId = crypto.randomUUID();
+    const hlc = hlcRef.current.now();
+    const payload = createChatOutboundPayload(
+      memberNameRef.current,
+      t("chat.you"),
+      draftText,
+      Date.now(),
+      userId,
+      { id: msgId, hlc, replyTo },
+    );
     if (!payload) return false;
-    const openConnections = openConnectionCount(channelsRef.current.values());
-    if (!canSendToRoom(false, payload.envelope.body, openConnections)) {
-      setChatError(t('chat.noRecipients'));
+    if (!canComposeRoomMessage(false, payload.envelope.body)) {
       return false;
     }
-    try {
-      broadcast(payload.envelope);
-    } catch {
-      setChatError(t('chat.sendFailed'));
-      return false;
+    const openConnections = openConnectionCount(channelsRef.current.values());
+    if (openConnections > 0) {
+      try {
+        broadcast(payload.envelope);
+      } catch {
+        setChatError(t('chat.sendFailed'));
+        return false;
+      }
     }
     setChatError('');
     chatAtBottomRef.current = true;
     addMessage(payload.localMessage);
+    if (activeRoomRef.current?.id) {
+      scheduleCollabBackup(activeRoomRef.current.id);
+    }
     return true;
-  }, [broadcast, addMessage, t, userId]);
+  }, [broadcast, addMessage, t, userId, scheduleCollabBackup]);
+
+  const toggleChatReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      if (activeRoomRef.current?.access === 'VIEWER' || !userId) return;
+      const target = messagesRef.current.find((item) => item.id === messageId);
+      const currentlyActive = Boolean(target?.reactions?.[emoji]?.includes(userId));
+      const nextActive = !currentlyActive;
+      const hlc = hlcRef.current.now();
+
+      setMessages((current) => {
+        const next = applyChatReaction(current, messageId, emoji, userId, nextActive);
+        messagesRef.current = next;
+        const room = activeRoomRef.current;
+        if (room) {
+          writeRoomChatCache(localStorage, roomChatCacheKey(userId, room.workspaceId, room.id), next);
+        }
+        return next;
+      });
+
+      if (openConnectionCount(channelsRef.current.values()) > 0) {
+        try {
+          broadcast({
+            type: "chat:reaction",
+            messageId,
+            emoji,
+            active: nextActive,
+            hlc,
+          });
+        } catch {
+          /* Best-effort P2P action broadcast; local + cloud backup still persists. */
+        }
+      }
+      if (activeRoomRef.current?.id) {
+        scheduleCollabBackup(activeRoomRef.current.id);
+      }
+    },
+    [broadcast, scheduleCollabBackup, userId],
+  );
+
+  const toggleChatPin = useCallback(
+    (messageId: string, pinned: boolean) => {
+      if (activeRoomRef.current?.access === 'VIEWER' || !userId) return;
+      const hlc = hlcRef.current.now();
+
+      setMessages((current) => {
+        const next = applyChatPin(current, messageId, pinned, memberNameRef.current);
+        messagesRef.current = next;
+        const room = activeRoomRef.current;
+        if (room) {
+          writeRoomChatCache(localStorage, roomChatCacheKey(userId, room.workspaceId, room.id), next);
+        }
+        return next;
+      });
+
+      if (openConnectionCount(channelsRef.current.values()) > 0) {
+        try {
+          broadcast({
+            type: "chat:pin",
+            messageId,
+            pinned,
+            hlc,
+          });
+        } catch {
+          /* Best-effort P2P action broadcast; local + cloud backup still persists. */
+        }
+      }
+      if (activeRoomRef.current?.id) {
+        scheduleCollabBackup(activeRoomRef.current.id);
+      }
+    },
+    [broadcast, scheduleCollabBackup, userId],
+  );
 
   const handleNoteContentChange = useCallback((body: string, updatedAt: number) => {
     if (activeRoomRef.current?.access === 'VIEWER') return;
+    const hlc = hlcRef.current.now();
     noteTextRef.current = body;
     noteUpdatedAtRef.current = updatedAt;
+    noteHlcRef.current = hlc;
     const openConnections = openConnectionCount(channelsRef.current.values());
     const envelope = buildNoteUpdateEnvelope({
       noteShared: noteSharedRef.current,
@@ -1997,19 +2389,27 @@ function App() {
       author: memberNameRef.current,
       body,
       updatedAt,
+      hlc,
     });
-    if (!envelope) return;
-    try {
-      broadcast(envelope);
-      if (noteErrorRef.current) applyNoteError('');
-    } catch {
-      applyNoteError(t('note.syncFailed'));
+    if (envelope) {
+      try {
+        broadcast(envelope);
+        if (noteErrorRef.current) applyNoteError('');
+      } catch {
+        applyNoteError(t('note.syncFailed'));
+      }
     }
-  }, [broadcast, applyNoteError, t]);
+    if (activeRoomRef.current?.id) {
+      scheduleNoteBackup(activeRoomRef.current.id);
+    }
+  }, [broadcast, applyNoteError, t, scheduleNoteBackup]);
 
   const toggleNoteSharing = useCallback(() => {
     if (activeRoomRef.current?.access === 'VIEWER') return;
     const openConnections = openConnectionCount(channelsRef.current.values());
+    const hlc = hlcRef.current.now();
+    noteHlcRef.current = hlc;
+
     if (noteSharedRef.current) {
       const unshareEnvelope = buildNoteUnshareEnvelope({
         roomReadOnly: false,
@@ -2029,32 +2429,43 @@ function App() {
       setNoteResyncing(false);
       clearNoteResyncTimer();
       applyNoteError('');
+      if (activeRoomRef.current?.id) {
+        scheduleNoteBackup(activeRoomRef.current.id);
+      }
       return;
     }
-    if (openConnections === 0) return;
+
     const syncTs = noteUpdatedAtRef.current ?? Date.now();
-    try {
-      broadcast({
-        type: "note:shared",
-        author: memberNameRef.current,
-        body: noteTextRef.current,
-        updatedAt: syncTs,
-      });
-    } catch {
-      applyNoteError(t('note.syncFailed'));
-      return;
+    if (openConnections > 0) {
+      try {
+        broadcast({
+          type: "note:shared",
+          author: memberNameRef.current,
+          body: noteTextRef.current,
+          updatedAt: syncTs,
+          hlc,
+        });
+      } catch {
+        applyNoteError(t('note.syncFailed'));
+        return;
+      }
     }
     noteUpdatedAtRef.current = syncTs;
     applyNoteError('');
     noteSharedRef.current = true;
     setNoteShared(true);
-  }, [broadcast, applyNoteError, clearNoteResyncTimer, t]);
+    if (activeRoomRef.current?.id) {
+      scheduleNoteBackup(activeRoomRef.current.id);
+    }
+  }, [broadcast, applyNoteError, clearNoteResyncTimer, t, scheduleNoteBackup]);
 
   const retryNoteSync = useCallback(() => {
     if (activeRoomRef.current?.access === 'VIEWER' || !noteSharedRef.current) return;
     const openConnections = openConnectionCount(channelsRef.current.values());
     if (openConnections === 0) return;
     const syncTs = noteUpdatedAtRef.current ?? Date.now();
+    const hlc = hlcRef.current.now();
+    noteHlcRef.current = hlc;
     setNoteResyncing(true);
     clearNoteResyncTimer();
     try {
@@ -2063,6 +2474,7 @@ function App() {
         author: memberNameRef.current,
         body: noteTextRef.current,
         updatedAt: syncTs,
+        hlc,
       });
       noteUpdatedAtRef.current = syncTs;
       applyNoteError('');
@@ -3306,6 +3718,8 @@ function App() {
                         sendDirectToPeer={sendDirectToBoardPeer}
                         registerMessageHandler={registerMeetingBoardMessageHandler}
                         registerPeerConnectHandler={registerMeetingBoardPeerConnectHandler}
+                        cloudBoard={cloudBoard}
+                        onBoardStateChange={handleBoardStateChange}
                         lang={lang}
                         addToast={addToast}
                       />
@@ -3318,7 +3732,9 @@ function App() {
                         roomName={currentRoom.name}
                         roomReadOnly={roomReadOnly}
                         peersCount={peersCount}
+                        currentUserId={user.id}
                         messages={messages}
+                        mentionableMembers={onlinePeers.map((peer) => ({ userId: peer.userId, name: peer.name }))}
                         chatError={chatError}
                         messagesHeading={t('chat.messagesHeading')}
                         noRecipientsLabel={t('chat.noRecipients')}
@@ -3327,6 +3743,8 @@ function App() {
                         lang={lang}
                         t={t}
                         onSendMessage={sendMessage}
+                        onToggleReaction={toggleChatReaction}
+                        onTogglePin={toggleChatPin}
                       />
                     </div>
 
@@ -3341,6 +3759,7 @@ function App() {
                         peersCount={peersCount}
                         noteError={noteError}
                         sharedNotes={sharedNotes}
+                        hydratedNote={hydratedNote}
                         lang={lang}
                         t={t}
                         onToggleNoteSharing={toggleNoteSharing}

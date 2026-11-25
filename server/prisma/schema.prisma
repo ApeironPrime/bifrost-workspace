@@ -32,6 +32,7 @@ model User {
   hostedRooms          Room[]            @relation("HostedRooms")
   createdRooms         Room[]            @relation("CreatedRooms")
   roomMemberships      RoomMember[]
+  roomNotes            UserRoomNote[]
   refreshTokens        RefreshToken[]
 
   @@map("users")
@@ -103,6 +104,8 @@ model Room {
   createdBy   User?        @relation("CreatedRooms", fields: [createdById], references: [id], onDelete: SetNull)
   members     RoomMember[]
   roles       RoomLabel[]
+  collabState RoomCollabState?
+  userNotes   UserRoomNote[]
 
   @@index([workspaceId])
   @@index([hostId])
@@ -140,4 +143,32 @@ model RoomLabel {
 
   @@index([workspaceId, roomId])
   @@map("room_roles")
+}
+
+model RoomCollabState {
+  roomId          String   @id @map("room_id") @db.Uuid
+  messagesJson    Json     @default("[]") @map("messages_json")
+  boardJson       Json     @default("{\"items\":[],\"tombstones\":{}}") @map("board_json")
+  sharedNotesJson Json     @default("{}") @map("shared_notes_json")
+  hlc             String?  @db.VarChar(160)
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  room            Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("room_collab_states")
+}
+
+model UserRoomNote {
+  roomId      String   @map("room_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  body        String   @default("") @db.Text
+  isShared    Boolean  @default(false) @map("is_shared")
+  updatedAtMs Float?   @map("updated_at_ms") @db.DoublePrecision
+  hlc         String?  @db.VarChar(160)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+  @@index([userId])
+  @@map("user_room_notes")
 }

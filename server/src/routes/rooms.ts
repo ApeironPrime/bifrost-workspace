@@ -16,6 +16,9 @@ export function createRoomRouter(db: PrismaClient = prisma) {
 
   router.use(requireAuth);
   router.get("/:roomId", validateUuidParams(ROOM_ID_RULE), controller.getById);
+  router.get("/:roomId/collab", validateUuidParams(ROOM_ID_RULE), controller.getCollab);
+  router.put("/:roomId/collab", validateUuidParams(ROOM_ID_RULE), controller.putCollab);
+  router.put("/:roomId/my-note", validateUuidParams(ROOM_ID_RULE), controller.putMyNote);
 
   return router;
 }

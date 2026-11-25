@@ -12,6 +12,8 @@ type RoomMember = { workspaceId: string; roomId: string; userId: string; role?: 
 type RoomLabel = { id: string; workspaceId: string; roomId: string; name: string; color: string; priority: number; createdAt: string; updatedAt: string }
 type MemberStatus = { workspaceId: string; userId: string; status: 'online' | 'offline'; currentRoomId: string | null; source: 'mock'; updatedAt: string }
 type Tables = { users: User[]; profiles: Profile[]; workspaces: Workspace[]; workspace_members: Member[]; rooms: Room[]; sessions: Session[]; room_members: RoomMember[]; member_statuses: MemberStatus[]; room_roles: RoomLabel[] }
+const txtCollabStore = new Map<string, { messages: unknown[]; board: { items: unknown[]; tombstones: Record<string, unknown> }; sharedNotes: Record<string, unknown> }>()
+const txtNotesStore = new Map<string, { body: string; isShared: boolean; updatedAt?: number; hlc?: string }>()
 const names = ['users', 'profiles', 'workspaces', 'workspace_members', 'rooms', 'sessions', 'room_members', 'member_statuses', 'room_roles'] as const
 const fresh = (): Tables => ({ users: [], profiles: [], workspaces: [], workspace_members: [], rooms: [], sessions: [], room_members: [], member_statuses: [], room_roles: [] })
 const digest = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -167,6 +169,50 @@ export function createTextDatabase(directory: string) {
         hostId,
         host: hostUser ? publicUser(hostUser) : null,
       }
+    }
+    const roomCollabRoute = path.match(/^\/rooms\/([^/]+)\/(collab|my-note)$/)
+    if (roomCollabRoute) {
+      const [, roomId, kind] = roomCollabRoute
+      const room = db.rooms.find(item => item.id === roomId)
+      if (!room) throw new ApiError('Không tìm thấy phòng.', 404)
+      const membership = db.workspace_members.find(row => row.workspaceId === room.workspaceId && row.userId === user.id)
+      if (!membership) throw new ApiError('Bạn không thuộc Workspace chứa phòng này.', 403)
+      const assignment = db.room_members.find(row => row.workspaceId === room.workspaceId && row.roomId === roomId && row.userId === user.id)
+      const access = membership.role === 'OWNER' ? 'OWNER' : (assignment?.role ?? (room.hostId === user.id ? 'HOST' : null))
+      if (!access) throw new ApiError('Bạn chưa được phân quyền tham gia room này.', 403)
+      if (kind === 'collab' && method === 'GET') {
+        const stored = txtCollabStore.get(roomId) ?? { messages: [], board: { items: [], tombstones: {} }, sharedNotes: {} }
+        const myNote = txtNotesStore.get(`${roomId}:${user.id}`) ?? null
+        return reply({ ...stored, myNote })
+      }
+      if (access === 'VIEWER') throw new ApiError('Bạn không có quyền ghi dữ liệu.', 403)
+      if (kind === 'collab' && method === 'PUT') {
+        const current = txtCollabStore.get(roomId) ?? { messages: [], board: { items: [], tombstones: {} }, sharedNotes: {} }
+        txtCollabStore.set(roomId, {
+          messages: Array.isArray(body.messages) ? body.messages : current.messages,
+          board: body.board && typeof body.board === 'object' ? (body.board as { items: unknown[]; tombstones: Record<string, unknown> }) : current.board,
+          sharedNotes: current.sharedNotes,
+        })
+        return reply({ ok: true })
+      }
+      if (kind === 'my-note' && method === 'PUT') {
+        const noteRecord = {
+          body: String(body.body ?? ''),
+          isShared: Boolean(body.isShared),
+          updatedAt: typeof body.updatedAt === 'number' ? body.updatedAt : Date.now(),
+          hlc: typeof body.hlc === 'string' ? body.hlc : undefined,
+        }
+        txtNotesStore.set(`${roomId}:${user.id}`, noteRecord)
+        const current = txtCollabStore.get(roomId) ?? { messages: [], board: { items: [], tombstones: {} }, sharedNotes: {} }
+        if (noteRecord.isShared) {
+          current.sharedNotes[user.id] = { author: user.name, authorId: user.id, body: noteRecord.body, updatedAt: noteRecord.updatedAt, hlc: noteRecord.hlc }
+        } else {
+          delete current.sharedNotes[user.id]
+        }
+        txtCollabStore.set(roomId, current)
+        return reply({ ok: true })
+      }
+      throw new ApiError('Thao tác không hợp lệ.', 405)
     }
     const singleRoomRoute = path.match(/^\/rooms\/([^/]+)$/)
     if (singleRoomRoute && method === 'GET') {

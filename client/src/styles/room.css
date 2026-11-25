@@ -3569,3 +3569,304 @@
   border-color: rgba(143, 191, 152, 0.55);
   color: #eef5ee;
 }
+
+/* =========================================================
+   Rich Chat (Cloud Sync, Search, Pinned Banner, Reply, Reactions, @mentions)
+   ========================================================= */
+
+.chat-header-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-cloud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--accent-primary, #53664b);
+  background: rgba(83, 102, 75, 0.12);
+  border: 1px solid rgba(83, 102, 75, 0.28);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.chat-search-toggle.is-active {
+  background: rgba(83, 102, 75, 0.18);
+  color: var(--accent-primary, #53664b);
+}
+
+.chat-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-subtle, rgba(128, 128, 128, 0.08));
+}
+
+.chat-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  outline: none;
+}
+
+.chat-pinned-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(201, 167, 128, 0.35);
+  background: rgba(201, 167, 128, 0.12);
+  color: var(--text-main);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-pinned-count {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chat-pinned-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.chat-bubble-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.chat-bubble.mine .chat-bubble-row {
+  flex-direction: row-reverse;
+}
+
+.chat-bubble-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.chat-bubble:hover .chat-bubble-actions,
+.chat-bubble:focus-within .chat-bubble-actions {
+  opacity: 1;
+}
+
+.chat-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-panel, var(--bg-page));
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chat-action-btn:hover,
+.chat-action-btn.is-pinned {
+  color: var(--text-main);
+  border-color: rgba(201, 167, 128, 0.55);
+}
+
+.chat-react-anchor {
+  position: relative;
+}
+
+.chat-reaction-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 999px;
+  background: var(--surface-panel, #1b2f26);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  z-index: 15;
+}
+
+.chat-bubble.mine .chat-reaction-picker {
+  left: auto;
+  right: 0;
+}
+
+.chat-reaction-choice {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 6px;
+}
+
+.chat-reaction-choice:hover {
+  background: rgba(143, 191, 152, 0.2);
+}
+
+.chat-reactions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.chat-reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(128, 128, 128, 0.1);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.chat-reaction-pill.is-mine {
+  border-color: rgba(143, 191, 152, 0.65);
+  background: rgba(143, 191, 152, 0.2);
+}
+
+.chat-reply-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  border: none;
+  border-left: 3px solid var(--accent-primary, #8fbf98);
+  background: rgba(0, 0, 0, 0.12);
+  color: inherit;
+  cursor: pointer;
+}
+
+.chat-reply-quote-author {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chat-reply-quote-body {
+  font-size: 11.5px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.chat-replying-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  border-left: 3px solid var(--accent-primary, #8fbf98);
+  background: var(--surface-subtle, rgba(128, 128, 128, 0.1));
+  font-size: 12px;
+}
+
+.chat-replying-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-replying-snippet {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-composer-anchor {
+  position: relative;
+}
+
+.chat-mention-popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  max-width: 300px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface-panel, #1b2f26);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-mention-option:hover {
+  background: rgba(143, 191, 152, 0.18);
+}
+
+.chat-mention-at {
+  font-weight: 700;
+  color: var(--accent-primary, #8fbf98);
+}
+
+.chat-mention-token {
+  font-weight: 600;
+  color: #a9dbb3;
+  background: rgba(143, 191, 152, 0.18);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.chat-pin-indicator {
+  display: inline-flex;
+  align-items: center;
+  color: #c9a780;
+}

@@ -85,10 +85,15 @@ export function canPeerSendDataChannelMessage(params: {
 }
 
 export interface DataChannelEnvelopeHandlers {
-  onChat: (payload: { body?: unknown; sentAt?: unknown }, sender: VerifiedPeerIdentity) => void;
+  onChat: (
+    payload: { id?: unknown; body?: unknown; sentAt?: unknown; hlc?: unknown; replyTo?: unknown },
+    sender: VerifiedPeerIdentity,
+  ) => void;
+  onChatAction?: (payload: Record<string, unknown>, sender: VerifiedPeerIdentity) => void;
+  onChatSync?: (payload: Record<string, unknown>, sender: VerifiedPeerIdentity) => void;
   onNoteUpdate: (
     peerId: string,
-    payload: { body?: unknown; updatedAt?: unknown },
+    payload: { body?: unknown; updatedAt?: unknown; hlc?: unknown },
     sender: VerifiedPeerIdentity,
   ) => void;
   onNoteUnshared: (peerId: string, sender: VerifiedPeerIdentity) => void;
@@ -318,15 +323,33 @@ export function dispatchVerifiedDataChannelPayload<TChannel>(params: {
 
   if (parsed.type === 'chat') {
     params.handlers.onChat(
-      { body: parsed.body, sentAt: parsed.sentAt },
+      {
+        body: parsed.body,
+        sentAt: parsed.sentAt,
+        ...(parsed.id !== undefined ? { id: parsed.id } : {}),
+        ...(parsed.hlc !== undefined ? { hlc: parsed.hlc } : {}),
+        ...(parsed.replyTo !== undefined ? { replyTo: parsed.replyTo } : {}),
+      },
       verifiedSender,
     );
+    return true;
+  }
+  if (parsed.type === 'chat:reaction' || parsed.type === 'chat:pin') {
+    params.handlers.onChatAction?.(parsed, verifiedSender);
+    return true;
+  }
+  if (parsed.type === 'chat:sync-state') {
+    params.handlers.onChatSync?.(parsed, verifiedSender);
     return true;
   }
   if (parsed.type === 'note:shared' || parsed.type === 'note:update') {
     params.handlers.onNoteUpdate(
       verifiedSender.peerId,
-      { body: parsed.body, updatedAt: parsed.updatedAt },
+      {
+        body: parsed.body,
+        updatedAt: parsed.updatedAt,
+        ...(parsed.hlc !== undefined ? { hlc: parsed.hlc } : {}),
+      },
       verifiedSender,
     );
     return true;

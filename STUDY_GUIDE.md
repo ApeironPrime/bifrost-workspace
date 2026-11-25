@@ -39,9 +39,10 @@ Tài liệu này giúp bạn học toàn bộ code của dự án **Bifrost** th
 2. [`client/src/lib/peerIdentity.ts`](client/src/lib/peerIdentity.ts) — Xác minh danh tính người gửi trên DataChannel dựa vào `peerId` thật của kết nối, chặn giả mạo `author` và chặn `VIEWER` gửi tin nhắn/thẻ ghi chú.
 3. [`client/src/lib/iceConfig.ts`](client/src/lib/iceConfig.ts) — Quản lý vòng đời ICE servers và tự làm mới credential TURN trước khi hết hạn.
 4. [`client/src/lib/fileTransfer.ts`](client/src/lib/fileTransfer.ts) — Chia file (tối đa 10 MB) thành các chunk 16 KB, điều tiết luồng (`bufferedAmount`), ghép Blob và xác nhận `file:ack` / `file:reject`.
-5. [`client/src/lib/mediaQuality.ts`](client/src/lib/mediaQuality.ts) — Adaptive P2P Mesh scaling (tự co giãn bitrate/FPS/độ phân giải theo số người trong phòng), phân tích WebRTC `getStats()` (RTT, jitter, packet loss) và phổ sóng âm giọng nói.
-6. [`client/src/features/room/hooks/useRoomMedia.ts`](client/src/features/room/hooks/useRoomMedia.ts), [`mediaProcessors.ts`](client/src/features/room/hooks/mediaProcessors.ts), [`useAudioActivity.ts`](client/src/features/room/hooks/useAudioActivity.ts) — Custom hook quản lý trọn vẹn MediaStream (Mic, Camera, Screen Share, chọn thiết bị, lọc ồn WebAudio, làm mờ nền Camera, Active Speaker và `getStats()`).
-7. [`client/src/App.tsx`](client/src/App.tsx) — Nơi ghép nối Socket.IO + `RTCPeerConnection` + `RTCDataChannel` + `useRoomMedia` + Refresh Token ngầm.
+5. [`client/src/lib/hlc.ts`](client/src/lib/hlc.ts) — Đồng hồ logic lai **Hybrid Logical Clock (HLC)** chống lệch giờ máy khách khi đồng bộ Note/Chat/Board.
+6. [`client/src/lib/mediaQuality.ts`](client/src/lib/mediaQuality.ts) — Adaptive P2P Mesh scaling (tự co giãn bitrate/FPS/độ phân giải theo số người trong phòng), phân tích WebRTC `getStats()` (RTT, jitter, packet loss) và phổ sóng âm giọng nói.
+7. [`client/src/features/room/hooks/useRoomMedia.ts`](client/src/features/room/hooks/useRoomMedia.ts), [`mediaProcessors.ts`](client/src/features/room/hooks/mediaProcessors.ts), [`useAudioActivity.ts`](client/src/features/room/hooks/useAudioActivity.ts) — Custom hook quản lý trọn vẹn MediaStream (Mic, Camera, Screen Share, chọn thiết bị, lọc ồn WebAudio, làm mờ nền Camera, Active Speaker và `getStats()`).
+8. [`client/src/App.tsx`](client/src/App.tsx) — Nơi ghép nối Socket.IO + `RTCPeerConnection` + `RTCDataChannel` + `useRoomMedia` + Cloud Snapshot Backup (PostgreSQL `room_collab_states` & `user_room_notes`) + Refresh Token ngầm.
 
 ### Chặng 5: Giao diện React theo Feature, Đa ngôn ngữ & Triển khai (Khoảng 2 giờ)
 1. **Giao diện chia theo tính năng** trong [`client/src/features/`](client/src/features/) và dùng chung trong [`client/src/shared/`](client/src/shared/):

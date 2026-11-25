@@ -37,6 +37,7 @@ interface NotesEditorProps {
   noteShareStatus: NoteShareStatus;
   peersCount: number;
   noteError: string;
+  hydratedNote?: { body: string; updatedAt?: number; version: number } | null;
   lang: Language;
   t: (key: I18nKey, params?: Record<string, string | number>) => string;
   onToggleNoteSharing: () => void;
@@ -53,6 +54,7 @@ const NotesEditor = memo(function NotesEditor({
   noteShareStatus,
   peersCount,
   noteError,
+  hydratedNote,
   lang,
   t,
   onToggleNoteSharing,
@@ -66,7 +68,18 @@ const NotesEditor = memo(function NotesEditor({
   const [noteUpdatedAt, setNoteUpdatedAt] = useState<number | undefined>(() =>
     readRoomNoteUpdatedAt(sessionStorage, scopeKey),
   );
+  const [appliedHydrationVersion, setAppliedHydrationVersion] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  if (hydratedNote && hydratedNote.version !== appliedHydrationVersion) {
+    setAppliedHydrationVersion(hydratedNote.version);
+    setNoteText(hydratedNote.body);
+    setNoteUpdatedAt(hydratedNote.updatedAt);
+    writeRoomDraft(sessionStorage, scopeKey, {
+      note: hydratedNote.body,
+      noteUpdatedAt: hydratedNote.updatedAt,
+    });
+  }
 
   const handleChange = useCallback(
     (next: string) => {
@@ -140,7 +153,7 @@ const NotesEditor = memo(function NotesEditor({
             type="button"
             className={`btn ${noteShared ? 'btn-primary' : 'btn-secondary'}`}
             onClick={onToggleNoteSharing}
-            disabled={roomReadOnly || (!noteShared && peersCount === 0)}
+            disabled={roomReadOnly}
             aria-pressed={noteShared}
             aria-describedby="room-note-scope"
           >
@@ -278,6 +291,7 @@ export interface NotesPaneProps {
   peersCount: number;
   noteError: string;
   sharedNotes: Record<string, SharedNoteItem>;
+  hydratedNote?: { body: string; updatedAt?: number; version: number } | null;
   lang: Language;
   t: (key: I18nKey, params?: Record<string, string | number>) => string;
   onToggleNoteSharing: () => void;
@@ -296,6 +310,7 @@ export const NotesPane = memo(function NotesPane({
   peersCount,
   noteError,
   sharedNotes,
+  hydratedNote,
   lang,
   t,
   onToggleNoteSharing,
@@ -317,6 +332,7 @@ export const NotesPane = memo(function NotesPane({
         noteShareStatus={noteShareStatus}
         peersCount={peersCount}
         noteError={noteError}
+        hydratedNote={hydratedNote}
         lang={lang}
         t={t}
         onToggleNoteSharing={onToggleNoteSharing}

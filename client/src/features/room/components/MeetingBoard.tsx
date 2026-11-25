@@ -73,6 +73,8 @@ interface MeetingBoardProps {
   currentUser: { id: string; name: string; email: string };
   workspaceId?: string;
   roomId?: string;
+  cloudBoard?: { data: BoardState; version: number } | null;
+  onBoardStateChange?: (state: BoardState) => void;
   lang: Language;
   addToast: (message: string, type: ToastType) => void;
 }
@@ -318,6 +320,8 @@ export const MeetingBoard = memo(function MeetingBoard({
   currentUser,
   workspaceId,
   roomId,
+  cloudBoard,
+  onBoardStateChange,
   lang,
   addToast,
 }: MeetingBoardProps) {
@@ -345,15 +349,41 @@ export const MeetingBoard = memo(function MeetingBoard({
   const [announcement, setAnnouncement] = useState('');
   const [discard, setDiscard] = useState(false);
   const [editingItem, setEditingItem] = useState<MeetingBoardItem | null>(null);
+  const [appliedCloudBoardVersion, setAppliedCloudBoardVersion] = useState(0);
 
   if (prevScopeKey !== scopeKey) {
     setPrevScopeKey(scopeKey);
     setBoard(loadBoardForScope(currentUser.id, workspaceId, roomId));
+    setAppliedCloudBoardVersion(0);
     setMobileKind('agenda');
     setShowAddModal(false);
     setEditingItem(null);
     setDeleteTarget(null);
     setDiscard(false);
+  }
+
+  if (cloudBoard && cloudBoard.version !== appliedCloudBoardVersion) {
+    setAppliedCloudBoardVersion(cloudBoard.version);
+    const merged = reconcileBoardSnapshots(
+      { items: board.items, tombstones: board.tombstones },
+      cloudBoard.data,
+    );
+    if (!areBoardStatesEqual(board, merged)) {
+      setBoard({
+        ...board,
+        items: merged.items,
+        tombstones: merged.tombstones,
+      });
+      if (scopeKey && workspaceId && roomId) {
+        writeRoomBoardDetailed(getBrowserLocalStorage(), scopeKey, {
+          userId: currentUser.id,
+          workspaceId,
+          roomId,
+          items: merged.items,
+          tombstones: merged.tombstones,
+        });
+      }
+    }
   }
 
   const t = useCallback(
@@ -390,6 +420,7 @@ export const MeetingBoard = memo(function MeetingBoard({
 
   const persistBoardState = useCallback(
     (stateToSave: BoardState) => {
+      onBoardStateChange?.(stateToSave);
       if (!scopeKey || !workspaceId || !roomId) {
         return { ok: false as const, status: 'invalid-key' as BoardStorageWriteStatus };
       }
@@ -401,7 +432,7 @@ export const MeetingBoard = memo(function MeetingBoard({
         tombstones: stateToSave.tombstones,
       });
     },
-    [scopeKey, currentUser.id, workspaceId, roomId]
+    [scopeKey, currentUser.id, workspaceId, roomId, onBoardStateChange]
   );
 
   useEffect(() => {
