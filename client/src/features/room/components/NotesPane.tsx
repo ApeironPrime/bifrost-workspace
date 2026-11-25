@@ -1,9 +1,12 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import { Copy, RefreshCw, Share2 } from 'lucide-react';
+import type * as Y from 'yjs';
 import type { I18nKey, Language } from '../../../i18n';
 import { formatClockTime, type NoteShareStatus, type SharedNoteItem } from '../../../lib/chatNotes';
+import type { RemoteCrdtCursor } from '../../../lib/crdtCollabDoc';
 import { readRoomDraft, readRoomNoteUpdatedAt, writeRoomDraft } from '../../../lib/roomUiState';
 import { useKeepFocusedInView } from '../../../shared/hooks/useKeepFocusedInView';
+import { CollabDocEditor } from './CollabDocEditor';
 
 export type { SharedNoteItem } from '../../../lib/chatNotes';
 
@@ -292,6 +295,11 @@ export interface NotesPaneProps {
   noteError: string;
   sharedNotes: Record<string, SharedNoteItem>;
   hydratedNote?: { body: string; updatedAt?: number; version: number } | null;
+  crdtText?: string;
+  crdtYText?: Y.Text | null;
+  crdtCursors?: RemoteCrdtCursor[];
+  onCrdtLocalChange?: (nextText: string) => void;
+  onCrdtSelectionChange?: (anchor: number, head: number) => void;
   lang: Language;
   t: (key: I18nKey, params?: Record<string, string | number>) => string;
   onToggleNoteSharing: () => void;
@@ -311,6 +319,11 @@ export const NotesPane = memo(function NotesPane({
   noteError,
   sharedNotes,
   hydratedNote,
+  crdtText = '',
+  crdtYText = null,
+  crdtCursors = [],
+  onCrdtLocalChange,
+  onCrdtSelectionChange,
   lang,
   t,
   onToggleNoteSharing,
@@ -319,36 +332,74 @@ export const NotesPane = memo(function NotesPane({
   onSuccessToast,
   onErrorToast,
 }: NotesPaneProps) {
+  const [mode, setMode] = useState<'collab' | 'personal'>('collab');
   const handleCopyNote = useCopyNote(t, onSuccessToast, onErrorToast);
 
   return (
     <section className="notes-tab-panel" aria-label={t('note.title')}>
-      <NotesEditor
-        key={scopeKey}
-        scopeKey={scopeKey}
-        roomName={roomName}
-        roomReadOnly={roomReadOnly}
-        noteShared={noteShared}
-        noteShareStatus={noteShareStatus}
-        peersCount={peersCount}
-        noteError={noteError}
-        hydratedNote={hydratedNote}
-        lang={lang}
-        t={t}
-        onToggleNoteSharing={onToggleNoteSharing}
-        onRetryNoteSync={onRetryNoteSync}
-        onNoteContentChange={onNoteContentChange}
-        onCopyNote={handleCopyNote}
-      />
-      <SharedNotesList
-        sharedNotes={sharedNotes}
-        noSharedNotesLabel={t('note.noSharedNotes')}
-        lang={lang}
-        sharedTitle={t('note.sharedTitle')}
-        noteEmptyLabel={t('note.noteEmpty')}
-        t={t}
-        onCopyNote={handleCopyNote}
-      />
+      <div className="notes-mode-switch" role="tablist" aria-label={t('note.title')}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'collab'}
+          className={`notes-mode-btn ${mode === 'collab' ? 'is-active' : ''}`}
+          onClick={() => setMode('collab')}
+        >
+          {t('note.modeCollabTab')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'personal'}
+          className={`notes-mode-btn ${mode === 'personal' ? 'is-active' : ''}`}
+          onClick={() => setMode('personal')}
+        >
+          {t('note.modePersonalTab')}
+        </button>
+      </div>
+      {mode === 'collab' ? (
+        <CollabDocEditor
+          roomName={roomName}
+          roomReadOnly={roomReadOnly}
+          text={crdtText}
+          ytext={crdtYText}
+          remoteCursors={crdtCursors}
+          peersCount={peersCount}
+          t={t}
+          onLocalChange={onCrdtLocalChange ?? (() => {})}
+          onSelectionChange={onCrdtSelectionChange ?? (() => {})}
+          onCopyNote={handleCopyNote}
+        />
+      ) : (
+        <>
+          <NotesEditor
+            key={scopeKey}
+            scopeKey={scopeKey}
+            roomName={roomName}
+            roomReadOnly={roomReadOnly}
+            noteShared={noteShared}
+            noteShareStatus={noteShareStatus}
+            peersCount={peersCount}
+            noteError={noteError}
+            hydratedNote={hydratedNote}
+            lang={lang}
+            t={t}
+            onToggleNoteSharing={onToggleNoteSharing}
+            onRetryNoteSync={onRetryNoteSync}
+            onNoteContentChange={onNoteContentChange}
+            onCopyNote={handleCopyNote}
+          />
+          <SharedNotesList
+            sharedNotes={sharedNotes}
+            noSharedNotesLabel={t('note.noSharedNotes')}
+            lang={lang}
+            sharedTitle={t('note.sharedTitle')}
+            noteEmptyLabel={t('note.noteEmpty')}
+            t={t}
+            onCopyNote={handleCopyNote}
+          />
+        </>
+      )}
     </section>
   );
 });

@@ -1,0 +1,199 @@
+.notes-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg-subtle, rgba(120, 125, 110, 0.1));
+  border: 1px solid var(--border-subtle, rgba(120, 125, 110, 0.2));
+  margin-bottom: 12px;
+  align-self: flex-start;
+}
+
+.notes-mode-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #5c5f52);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.notes-mode-btn.is-active {
+  background: var(--bg-surface, #fff);
+  color: var(--text-main, #22231e);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.collab-doc-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.collab-cursors-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.collab-cursor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #fff;
+}
+
+.collab-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle, rgba(120, 125, 110, 0.22));
+  background: var(--bg-subtle, rgba(120, 125, 110, 0.06));
+}
+
+.collab-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-main, #22231e);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.collab-toolbar-btn:hover:not(:disabled) {
+  background: var(--bg-surface, #fff);
+  border-color: var(--border-subtle, rgba(120, 125, 110, 0.25));
+}
+
+.collab-toolbar-btn.is-active {
+  background: var(--bg-surface, #fff);
+  border-color: var(--accent, #53664b);
+  color: var(--accent, #53664b);
+}
+
+.collab-editor-stage {
+  position: relative;
+  flex: 1;
+  min-height: 280px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle, rgba(120, 125, 110, 0.25));
+  background: var(--bg-surface, #fff);
+  overflow: hidden;
+}
+
+.collab-mirror-backdrop,
+.collab-textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.collab-mirror-backdrop {
+  pointer-events: none;
+  color: transparent;
+  z-index: 1;
+}
+
+.collab-textarea {
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  color: var(--text-main, #22231e);
+  resize: none;
+  outline: none;
+}
+
+.collab-remote-caret {
+  position: relative;
+  display: inline-block;
+  width: 2px;
+  height: 1.15em;
+  vertical-align: text-bottom;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-radius: 1px;
+}
+
+.collab-remote-flag {
+  position: absolute;
+  bottom: 100%;
+  left: -1px;
+  padding: 1px 5px;
+  border-radius: 4px 4px 4px 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.collab-remote-selection {
+  border-radius: 3px;
+}
+
+.collab-preview-surface {
+  flex: 1;
+  min-height: 280px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle, rgba(120, 125, 110, 0.25));
+  background: var(--bg-surface, #fff);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.collab-preview-line {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.collab-preview-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.collab-preview-code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle, rgba(120, 125, 110, 0.14));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+}

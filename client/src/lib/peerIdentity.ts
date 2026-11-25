@@ -18,6 +18,7 @@ export interface WorkspaceMemberAccessRecord {
 
 const READ_ONLY_ALLOWED_DC_MESSAGE_TYPES = new Set([
   'meeting-board:sync-request',
+  'crdt:sync-request',
   'file:ack',
   'file:reject',
   'file:resume',
@@ -99,6 +100,11 @@ export interface DataChannelEnvelopeHandlers {
   ) => void;
   onNoteUnshared: (peerId: string, sender: VerifiedPeerIdentity) => void;
   onMeetingBoard: (
+    message: Record<string, unknown>,
+    peerId: string,
+    sender: VerifiedPeerIdentity,
+  ) => void;
+  onCrdt?: (
     message: Record<string, unknown>,
     peerId: string,
     sender: VerifiedPeerIdentity,
@@ -386,6 +392,10 @@ export function dispatchVerifiedDataChannelPayload<TChannel>(params: {
   }
   if (parsed.type.startsWith('meeting-board:')) {
     params.handlers.onMeetingBoard(parsed, verifiedSender.peerId, verifiedSender);
+    return true;
+  }
+  if (parsed.type.startsWith('crdt:')) {
+    params.handlers.onCrdt?.(parsed, verifiedSender.peerId, verifiedSender);
     return true;
   }
   if (parsed.type.startsWith('file:')) {

@@ -109,6 +109,25 @@ test('Two real browser contexts connect via 1-click invite and exchange P2P Chat
       timeout: 15_000,
     })
 
+    // 9b. Verify real P2P Yjs CRDT Collaborative Document + Live Multi-User Cursor
+    await alice.locator('#room-tab-notes').click()
+    await bob.locator('#room-tab-notes').click()
+    await alice.locator('#room-panel-notes .collab-textarea').fill('# Sprint Retro\n- P2P Yjs CRDT ready')
+    await expect(bob.locator('#room-panel-notes .collab-textarea')).toHaveValue(
+      '# Sprint Retro\n- P2P Yjs CRDT ready',
+      { timeout: 15_000 },
+    )
+    const bobEditor = bob.locator('#room-panel-notes .collab-textarea')
+    await bobEditor.fill('# Sprint Retro\n- P2P Yjs CRDT ready\n- Bob live edit')
+    await bobEditor.click()
+    await expect(alice.locator('#room-panel-notes .collab-textarea')).toHaveValue(
+      '# Sprint Retro\n- P2P Yjs CRDT ready\n- Bob live edit',
+      { timeout: 15_000 },
+    )
+    await expect(alice.locator('#room-panel-notes .collab-cursor-pill')).toContainText('Bob E2E', {
+      timeout: 15_000,
+    })
+
     // 10. Verify real WebRTC Video track over fake media stream
     await alice.locator('#room-tab-meeting').click()
     await bob.locator('#room-tab-meeting').click()

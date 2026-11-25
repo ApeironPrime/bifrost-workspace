@@ -1,4 +1,5 @@
 import { z } from "zod";
+import * as Y from "yjs";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { Prisma } from "../generated/prisma/client.js";
 import { WorkspaceRole } from "../generated/prisma/enums.js";
@@ -19,8 +20,40 @@ const collabBackupSchema = z.object({
       tombstones: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
     })
     .optional(),
+  crdtDocBase64: z.string().max(500_000).optional(),
   hlc: z.string().max(160).optional(),
 });
+
+const CRDT_STATE_KEY = "__crdtDocBase64";
+
+function mergeYjsBase64(existingB64: unknown, incomingB64: string): string {
+  let incomingBytes: Uint8Array;
+  try {
+    incomingBytes = Uint8Array.from(Buffer.from(incomingB64, "base64"));
+    if (incomingBytes.length === 0) {
+      throw new Error("Empty CRDT update");
+    }
+    const probe = new Y.Doc();
+    Y.applyUpdate(probe, incomingBytes);
+    probe.destroy();
+  } catch {
+    throw new RoomServiceError(400, "Dữ liệu tài liệu CRDT không hợp lệ.");
+  }
+
+  if (typeof existingB64 === "string" && existingB64.trim().length > 0) {
+    try {
+      const existingBytes = Uint8Array.from(Buffer.from(existingB64, "base64"));
+      if (existingBytes.length > 0) {
+        const merged = Y.mergeUpdates([existingBytes, incomingBytes]);
+        return Buffer.from(merged).toString("base64");
+      }
+    } catch {
+      // If stored state was corrupt, replace with validated incoming bytes.
+    }
+  }
+
+  return Buffer.from(incomingBytes).toString("base64");
+}
 
 const userNoteSchema = z.object({
   body: z.string().max(50000),
@@ -211,6 +244,16 @@ export async function getRoomCollabForUser(
       ? (collab.boardJson as { items?: unknown[]; tombstones?: Record<string, unknown> })
       : { items: [], tombstones: {} };
 
+  const rawSharedNotes =
+    collab?.sharedNotesJson && typeof collab.sharedNotesJson === "object" && !Array.isArray(collab.sharedNotesJson)
+      ? ({ ...(collab.sharedNotesJson as Record<string, unknown>) })
+      : {};
+  const crdtDocBase64 =
+    typeof rawSharedNotes[CRDT_STATE_KEY] === "string"
+      ? (rawSharedNotes[CRDT_STATE_KEY] as string)
+      : null;
+  delete rawSharedNotes[CRDT_STATE_KEY];
+
   return {
     messages: Array.isArray(collab?.messagesJson) ? collab.messagesJson : [],
     board: {
@@ -220,10 +263,8 @@ export async function getRoomCollabForUser(
           ? boardObj.tombstones
           : {},
     },
-    sharedNotes:
-      collab?.sharedNotesJson && typeof collab.sharedNotesJson === "object" && !Array.isArray(collab.sharedNotesJson)
-        ? collab.sharedNotesJson
-        : {},
+    sharedNotes: rawSharedNotes,
+    crdtDocBase64,
     myNote: myNote
       ? {
           body: myNote.body,
@@ -260,6 +301,19 @@ export async function saveRoomCollabForUser(
       : (existing?.boardJson ?? { items: [], tombstones: {} });
 
   const nextHlc = parsed.hlc ?? existing?.hlc ?? null;
+  const existingShared =
+    existing?.sharedNotesJson &&
+    typeof existing.sharedNotesJson === "object" &&
+    !Array.isArray(existing.sharedNotesJson)
+      ? ({ ...(existing.sharedNotesJson as Record<string, unknown>) })
+      : {};
+
+  if (parsed.crdtDocBase64 !== undefined) {
+    existingShared[CRDT_STATE_KEY] = mergeYjsBase64(
+      existingShared[CRDT_STATE_KEY],
+      parsed.crdtDocBase64,
+    );
+  }
 
   await db.roomCollabState.upsert({
     where: { roomId },
@@ -267,12 +321,13 @@ export async function saveRoomCollabForUser(
       roomId,
       messagesJson: nextMessages as Prisma.InputJsonValue,
       boardJson: nextBoard as Prisma.InputJsonValue,
-      sharedNotesJson: (existing?.sharedNotesJson ?? {}) as Prisma.InputJsonValue,
+      sharedNotesJson: existingShared as Prisma.InputJsonValue,
       hlc: nextHlc,
     },
     update: {
       messagesJson: nextMessages as Prisma.InputJsonValue,
       boardJson: nextBoard as Prisma.InputJsonValue,
+      sharedNotesJson: existingShared as Prisma.InputJsonValue,
       hlc: nextHlc,
     },
   });

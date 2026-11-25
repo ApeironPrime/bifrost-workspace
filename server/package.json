@@ -7,7 +7,7 @@
     "dev": "npm run build && node dist/index.js",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test tests/test_validation.mjs tests/test_auth_ratelimit.mjs tests/test_turn.mjs tests/test_scale_security.mjs tests/test_account_onboarding.mjs tests/test_observability.mjs && node tests/test_stage5.mjs"
+    "test": "npm run build && node --test tests/test_validation.mjs tests/test_auth_ratelimit.mjs tests/test_turn.mjs tests/test_scale_security.mjs tests/test_account_onboarding.mjs tests/test_observability.mjs tests/test_crdt_collab.mjs && node tests/test_stage5.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -22,6 +22,7 @@
     "pg": "^8.23.0",
     "redis": "^6.4.0",
     "socket.io": "^4.8.1",
+    "yjs": "^13.6.33",
     "zod": "^3.24.2"
   },
   "devDependencies": {

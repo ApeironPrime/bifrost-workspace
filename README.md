@@ -3,7 +3,7 @@
 Nền tảng cộng tác và họp nhóm theo phòng sử dụng mô hình **Hybrid (Client–Server Signaling + WebRTC P2P Full Mesh)**.
 
 - **Tầng điều khiển (Client–Server)**: Node.js, Express, Socket.IO, Prisma 7 và PostgreSQL xử lý xác thực (JWT + Refresh Token xoay vòng), Workspace/Room/Phân quyền, Presence và chuyển tiếp bắt tay WebRTC (`offer`, `answer`, `ice-candidate`).
-- **Tầng dữ liệu thời gian thực (WebRTC P2P)**: Âm thanh (Mic), Video (Camera), Chia sẻ màn hình (Screen Share), Chat, Ghi chú chia sẻ, Bảng họp Kanban (`MeetingBoard`) và Truyền tệp P2P (`FileShare`) truyền trực tiếp giữa các trình duyệt, không đi qua app server.
+- **Tầng dữ liệu thời gian thực (WebRTC P2P)**: Âm thanh (Mic), Video (Camera), Chia sẻ màn hình (Screen Share), Chat, Tài liệu cộng tác CRDT thời gian thực (`yjs` + con trỏ đa người dùng `Y.RelativePosition`), Ghi chú cá nhân/chia sẻ, Bảng họp Kanban (`MeetingBoard`) và Truyền tệp P2P (`FileShare`) truyền trực tiếp giữa các trình duyệt, không đi qua app server.
 
 ## Cấu trúc thư mục
 
@@ -67,7 +67,7 @@ docker compose -f docker-compose.prod.yml up -d --build
   - **Avatar Storage**: Lưu ảnh đại diện dạng content-addressed JPEG trên S3/R2 hoặc volume `/api/avatars/<sha256>.jpg` thay vì nhét Base64 vào PostgreSQL.
   - **Token Hardening**: Refresh token nằm trong cookie `HttpOnly; SameSite=Lax; Path=/api/auth` (`bifrost_rt`), Access token giữ hoàn toàn trong bộ nhớ RAM phía client.
   - **Tài khoản & Onboarding**: Hỗ trợ xác minh Email OTP 6 số, Quên/Đặt lại mật khẩu, OAuth2 (Google/GitHub), bảo mật 2 lớp (2FA TOTP + Recovery Codes), liên kết mời 1-click (`/#invite=...`) và thông báo đẩy + chuông báo khi mở phòng họp (`workspace:room-active`).
-  - **Kiến trúc Modular & Vận hành (DevOps/QA)**: Tách `App.tsx` thành các feature views/hooks/modals (`AppSidebar`, `AppHeader`, `DashboardView`, `RoomWorkspaceView`, `ProfileSecurityModal`, `WorkspaceModals`), tích hợp Prometheus `GET /api/metrics` + `POST /api/telemetry/errors` + `AppErrorBoundary`, pipeline `.github/workflows/ci.yml` và kiểm thử đa tab Chromium WebRTC P2P (`npm run test:e2e`).
+  - **Kiến trúc Modular & Vận hành (DevOps/QA)**: Tách `App.tsx` (< 400 dòng) thành các domain hooks (`useWebRtcRoomEngine`, `useAuthAndProfile`, `useWorkspaceDirectory`, `useShellLayout`) và feature views/modals (`AuthenticatedWorkspaceShell`, `AppSidebar`, `AppHeader`, `DashboardView`, `RoomWorkspaceView`, `ProfileSecurityModal`, `WorkspaceModals`), đồng bộ tài liệu CRDT (`Y.Doc` + `Y.mergeUpdates` lưu trữ PostgreSQL), tích hợp Prometheus `GET /api/metrics` + `POST /api/telemetry/errors` + `AppErrorBoundary`, pipeline `.github/workflows/ci.yml` và kiểm thử đa tab Chromium WebRTC P2P (`npm run test:e2e`).
 
 ## Kiểm thử tự động
 
