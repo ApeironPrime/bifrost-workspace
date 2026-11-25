@@ -131,6 +131,7 @@ import { useDelayedLoading } from './shared/hooks/useDelayedLoading';
 import { searchKey } from './lib/selectOptions';
 import { WorkspaceLoadingScreen } from './features/workspace/WorkspaceLoadingScreen';
 import { withCurrentUserHost } from './lib/roomHostProfile';
+import { BUFFERED_LOW_THRESHOLD } from './lib/fileTransfer';
 import { canComposeRoomMessage, openConnectionCount } from './lib/roomControls';
 import { useDialogFocus } from './shared/hooks/useDialogFocus';
 import {
@@ -211,6 +212,9 @@ function App() {
   const meetingBoardPeerConnectListenersRef = useRef<Set<(peerId: string) => void>>(new Set());
   const fileMessageListenersRef = useRef<
     Set<(msg: FileShareMessage, peerId: string, verifiedSender: VerifiedPeerIdentity) => void>
+  >(new Set());
+  const fileBinaryListenersRef = useRef<
+    Set<(frame: ArrayBuffer, peerId: string, verifiedSender: VerifiedPeerIdentity) => void>
   >(new Set());
 
   // Internationalization (i18n)
@@ -637,6 +641,23 @@ function App() {
     const channel = channelsRef.current.get(peerId);
     if (channel && channel.readyState === "open") {
       channel.send(JSON.stringify(message));
+    }
+  }, []);
+
+  const registerFileBinaryHandler = useCallback(
+    (handler: (frame: ArrayBuffer, peerId: string, verifiedSender: VerifiedPeerIdentity) => void) => {
+      fileBinaryListenersRef.current.add(handler);
+      return () => {
+        fileBinaryListenersRef.current.delete(handler);
+      };
+    },
+    []
+  );
+
+  const sendBinaryToFilePeer = useCallback((peerId: string, frame: ArrayBuffer) => {
+    const channel = channelsRef.current.get(peerId);
+    if (channel && channel.readyState === "open") {
+      channel.send(frame);
     }
   }, []);
 
@@ -1340,6 +1361,8 @@ function App() {
   }, [token, clearNoteResyncTimer, removePeerMedia]);
 
   const setupDataChannel = useCallback((peerId: string, channel: RTCDataChannel, targetRoomId: string) => {
+    channel.binaryType = "arraybuffer";
+    channel.bufferedAmountLowThreshold = BUFFERED_LOW_THRESHOLD;
     channelsRef.current.set(peerId, channel);
     channel.onopen = () => {
       if (
@@ -1548,6 +1571,11 @@ function App() {
           onFileShare: (message, verifiedPeerId, verifiedSender) => {
             fileMessageListenersRef.current.forEach((listener) =>
               listener(message as unknown as FileShareMessage, verifiedPeerId, verifiedSender),
+            );
+          },
+          onFileBinaryChunk: (frame, verifiedPeerId, verifiedSender) => {
+            fileBinaryListenersRef.current.forEach((listener) =>
+              listener(frame, verifiedPeerId, verifiedSender),
             );
           },
         },
@@ -3780,7 +3808,9 @@ function App() {
                         channelsRef={channelsRef}
                         broadcast={broadcast}
                         sendDirect={sendDirectToFilePeer}
+                        sendBinaryDirect={sendBinaryToFilePeer}
                         registerMessageHandler={registerFileMessageHandler}
+                        registerBinaryHandler={registerFileBinaryHandler}
                         onSuccessToast={handleSuccessToast}
                         onErrorToast={handleErrorToast}
                         t={t}

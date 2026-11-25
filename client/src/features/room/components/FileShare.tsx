@@ -1,15 +1,20 @@
-import { memo, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Upload, Download, FileText, X } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { Upload, Download, FileText, RotateCcw, ShieldCheck, X } from "lucide-react";
 import {
   MAX_FILE_SIZE,
   CHUNK_SIZE,
   MAX_ACTIVE_TRANSFERS,
+  MAX_BUFFERED_AMOUNT,
   FILE_ACK_TIMEOUT_MS,
+  RESUMABLE_TRANSFER_TTL_MS,
   fileSizeIssue,
   formatBytes,
   base64ToUint8Array,
-  splitFileIntoChunks,
-  reassembleChunks,
+  uint8ArrayToBase64,
+  streamFileSlices,
+  encodeBinaryFileChunk,
+  decodeBinaryFileChunk,
+  resolveResumeStartChunk,
   shouldFlushInboundProgress,
   createOutboundRecipientState,
   markOutboundEndSent,
@@ -22,8 +27,10 @@ import {
   type OutboundTransferRecipientState,
   type ReceivedFile,
 } from "../../../lib/fileTransfer";
+import { IncrementalSha256 } from "../../../lib/sha256";
 import { hasMatchingVerifiedPeer, type VerifiedPeerIdentity } from "../../../lib/peerIdentity";
 import type { I18nKey } from "../../../i18n";
+import { createInboundChunkSink, saveBlobWithFilePicker, type InboundChunkSink } from "../hooks/fileChunkSink";
 
 export type FileShareMessage =
   | {
@@ -33,6 +40,7 @@ export type FileShareMessage =
       mimeType: string;
       size: number;
       totalChunks: number;
+      resuming?: boolean;
     }
   | {
       type: "file:chunk";
@@ -43,6 +51,12 @@ export type FileShareMessage =
   | {
       type: "file:end";
       transferId: string;
+      sha256?: string;
+    }
+  | {
+      type: "file:resume";
+      transferId: string;
+      nextChunkIndex: number;
     }
   | {
       type: "file:ack";
@@ -62,12 +76,28 @@ interface FileShareProps {
   channelsRef: { current: Map<string, RTCDataChannel> };
   broadcast?: (envelope: FileShareMessage) => void;
   sendDirect: (peerId: string, envelope: FileShareMessage) => void;
+  sendBinaryDirect?: (peerId: string, frame: ArrayBuffer) => void;
   registerMessageHandler: (
     handler: (message: FileShareMessage, peerId: string, verifiedSender: VerifiedPeerIdentity) => void
+  ) => () => void;
+  registerBinaryHandler?: (
+    handler: (frame: ArrayBuffer, peerId: string, verifiedSender: VerifiedPeerIdentity) => void
   ) => () => void;
   onSuccessToast: (message: string) => void;
   onErrorToast: (message: string) => void;
   t: (key: I18nKey, params?: Record<string, string | number>) => string;
+}
+
+interface InboundSession {
+  transfer: InboundTransfer;
+  sink: InboundChunkSink | null;
+  sinkReady: Promise<InboundChunkSink>;
+  receivedIndices: Set<number>;
+  hasher: IncrementalSha256;
+  nextHashIndex: number;
+  pendingHashChunks: Map<number, Uint8Array>;
+  writeChain: Promise<void>;
+  finalized: boolean;
 }
 
 function fileFormatBadge(name: string): string {
@@ -85,6 +115,21 @@ function formatReceivedTime(timestamp: number): string {
   }
 }
 
+function waitForChannelDrain(channel: RTCDataChannel, timeoutMs = 45): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      channel.removeEventListener?.("bufferedamountlow", finish);
+      clearTimeout(timerId);
+      resolve();
+    };
+    const timerId = setTimeout(finish, timeoutMs);
+    channel.addEventListener?.("bufferedamountlow", finish, { once: true });
+  });
+}
+
 export const FileShare = memo(function FileShare({
   readOnly = false,
   roomId,
@@ -92,12 +137,14 @@ export const FileShare = memo(function FileShare({
   onlinePeerIds,
   channelsRef,
   sendDirect,
+  sendBinaryDirect,
   registerMessageHandler,
+  registerBinaryHandler,
   onSuccessToast,
   onErrorToast,
   t,
 }: FileShareProps) {
-  const [fileError, setFileError] = useState('');
+  const [fileError, setFileError] = useState("");
   const retryFilesRef = useRef(new Map<string, File>());
   const [retryableIds, setRetryableIds] = useState<string[]>([]);
   const roomRevision = useRef(0);
@@ -111,26 +158,38 @@ export const FileShare = memo(function FileShare({
   const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  const inboundRef = useRef<Map<string, InboundTransfer>>(new Map());
+  const inboundSessionsRef = useRef<Map<string, InboundSession>>(new Map());
   const inboundFlushMetaRef = useRef<Map<string, { count: number; atMs: number }>>(new Map());
   const activeOutboundIdsRef = useRef<Set<string>>(new Set());
   const activeTransfersCancelRef = useRef<Set<string>>(new Set());
   const rejectedOutboundIdsRef = useRef<Set<string>>(new Set());
   const outboundRecipientStateRef = useRef<Map<string, OutboundTransferRecipientState>>(new Map());
+  const outboundResumeOffsetsRef = useRef<Map<string, Map<string, number>>>(new Map());
   const outboundAckWaitersRef = useRef<
     Map<string, { resolve: (ok: boolean) => void; timerId: ReturnType<typeof setTimeout> }>
   >(new Map());
   const receivedFilesRef = useRef<ReceivedFile[]>([]);
+  const completedSinksRef = useRef<InboundChunkSink[]>([]);
+
+  const savePickerSupported =
+    typeof window !== "undefined" &&
+    typeof (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker === "function";
 
   useEffect(() => {
     receivedFilesRef.current = receivedFiles;
   }, [receivedFiles]);
 
-  const inboundKey = (peerId: string, transferId: string) => `${peerId}:${transferId}`;
+  const inboundKey = (userId: string, transferId: string) => `${userId}:${transferId}`;
 
-  // Clean up object URLs and state on room change or unmount.
-  // Mark pending send loops as cancelled before state is reset, otherwise a
-  // file selected in an old room can continue into the next room.
+  const syncInboundUiMap = useCallback(() => {
+    const uiMap = new Map<string, InboundTransfer>();
+    inboundSessionsRef.current.forEach((session, key) => {
+      uiMap.set(key, { ...session.transfer });
+    });
+    setInboundTransfers(uiMap);
+  }, []);
+
+  // Clean up object URLs, OPFS temp files, and active transfers on room change or unmount.
   useEffect(() => {
     const cancelSet = activeTransfersCancelRef.current;
     const activeOutboundIds = activeOutboundIdsRef.current;
@@ -139,7 +198,9 @@ export const FileShare = memo(function FileShare({
     const retryFiles = retryFilesRef.current;
     const inboundFlushMeta = inboundFlushMetaRef.current;
     const outboundRecipientState = outboundRecipientStateRef.current;
+    const outboundResumeOffsets = outboundResumeOffsetsRef.current;
     const outboundAckWaiters = outboundAckWaitersRef.current;
+
     return () => {
       lifecycle.current++;
       retryFiles.clear();
@@ -150,10 +211,18 @@ export const FileShare = memo(function FileShare({
       });
       outboundAckWaiters.clear();
       outboundRecipientState.clear();
+      outboundResumeOffsets.clear();
       rejectedOutboundIds.clear();
-      inboundRef.current.forEach((transfer) => transfer.receivedChunks.clear());
-      inboundRef.current = new Map();
+      inboundSessionsRef.current.forEach((session) => {
+        session.pendingHashChunks.clear();
+        void session.sinkReady.then((sink) => sink.dispose()).catch(() => {});
+      });
+      inboundSessionsRef.current = new Map();
       inboundFlushMeta.clear();
+      completedSinksRef.current.forEach((sink) => {
+        void sink.dispose().catch(() => {});
+      });
+      completedSinksRef.current = [];
       receivedFilesRef.current.forEach((file) => URL.revokeObjectURL(file.url));
       receivedFilesRef.current = [];
       setOutboundTransfers(new Map());
@@ -162,26 +231,36 @@ export const FileShare = memo(function FileShare({
     };
   }, [roomId]);
 
-  // Drop incomplete inbound files as soon as their sender leaves the room, and
-  // re-evaluate pending outbound ack/cancel states when room peers disconnect.
+  // Pause resumable inbound transfers (instead of wiping them) when sender leaves briefly,
+  // and re-evaluate pending outbound ack/cancel states when peers disconnect.
   useEffect(() => {
     const activeRevision = roomRevision.current;
-    let inboundChanged = false;
-    const nextInbound = new Map<string, InboundTransfer>();
-    for (const [key, transfer] of inboundRef.current.entries()) {
-      if (onlinePeerIds.has(transfer.senderPeerId)) {
-        nextInbound.set(key, transfer);
-      } else {
-        inboundChanged = true;
-        transfer.receivedChunks.clear();
-        inboundFlushMetaRef.current.delete(key);
+    const now = Date.now();
+    let changed = false;
+
+    for (const [key, session] of inboundSessionsRef.current.entries()) {
+      const peerOnline = onlinePeerIds.has(session.transfer.senderPeerId);
+      if (!peerOnline && !session.transfer.paused) {
+        if (
+          session.transfer.contiguousChunks > 0 &&
+          now - session.transfer.startedAt < RESUMABLE_TRANSFER_TTL_MS
+        ) {
+          session.transfer.paused = true;
+          changed = true;
+        } else {
+          inboundSessionsRef.current.delete(key);
+          inboundFlushMetaRef.current.delete(key);
+          session.pendingHashChunks.clear();
+          void session.sinkReady.then((sink) => sink.dispose()).catch(() => {});
+          changed = true;
+        }
       }
     }
-    if (inboundChanged) {
-      inboundRef.current = nextInbound;
+
+    if (changed) {
       queueMicrotask(() => {
         if (roomRevision.current === activeRevision) {
-          setInboundTransfers(new Map(inboundRef.current));
+          syncInboundUiMap();
         }
       });
     }
@@ -202,9 +281,96 @@ export const FileShare = memo(function FileShare({
         waiter.resolve(resolution === "completed");
       }
     });
-  }, [onlinePeerIds, channelsRef]);
+  }, [onlinePeerIds, channelsRef, syncInboundUiMap]);
 
-  // Handle incoming DataChannel file messages
+  const ingestInboundChunk = useCallback(
+    (peerId: string, verifiedUserId: string, transferId: string, index: number, chunkBytes: Uint8Array) => {
+      const key = inboundKey(verifiedUserId, transferId);
+      const session = inboundSessionsRef.current.get(key);
+      if (!session || session.finalized) return;
+
+      const transfer = session.transfer;
+      if (transfer.senderPeerId !== peerId) return;
+      if (index < 0 || index >= transfer.totalChunks) return;
+
+      const maxChunkBytes =
+        index === transfer.totalChunks - 1
+          ? transfer.size - CHUNK_SIZE * (transfer.totalChunks - 1)
+          : CHUNK_SIZE;
+      if (chunkBytes.byteLength > maxChunkBytes || session.receivedIndices.has(index)) return;
+      if (transfer.receivedBytes + chunkBytes.byteLength > transfer.size) return;
+
+      session.receivedIndices.add(index);
+      transfer.receivedCount = session.receivedIndices.size;
+      transfer.receivedBytes += chunkBytes.byteLength;
+      transfer.paused = false;
+      while (session.receivedIndices.has(transfer.contiguousChunks)) {
+        transfer.contiguousChunks += 1;
+      }
+
+      // Copy slice before async write so WebRTC buffer reuse cannot mutate queued bytes.
+      const copy = new Uint8Array(chunkBytes);
+      if (index === session.nextHashIndex) {
+        session.hasher.update(copy);
+        session.nextHashIndex += 1;
+        while (session.pendingHashChunks.has(session.nextHashIndex)) {
+          const buffered = session.pendingHashChunks.get(session.nextHashIndex)!;
+          session.pendingHashChunks.delete(session.nextHashIndex);
+          session.hasher.update(buffered);
+          session.nextHashIndex += 1;
+        }
+      } else if (index > session.nextHashIndex) {
+        session.pendingHashChunks.set(index, copy);
+      }
+
+      const byteOffset = index * CHUNK_SIZE;
+      session.writeChain = session.writeChain
+        .then(async () => {
+          const sink = session.sink ?? (await session.sinkReady);
+          session.sink = sink;
+          transfer.storageMode = sink.mode;
+          await sink.writeChunk(index, byteOffset, copy);
+        })
+        .catch(() => {
+          /* Handled at finalize verification. */
+        });
+
+      const nowMs = Date.now();
+      const meta = inboundFlushMetaRef.current.get(key) ?? {
+        count: 0,
+        atMs: transfer.startedAt,
+      };
+      if (
+        shouldFlushInboundProgress({
+          receivedCount: transfer.receivedCount,
+          totalChunks: transfer.totalChunks,
+          lastFlushedCount: meta.count,
+          lastFlushedAtMs: meta.atMs,
+          nowMs,
+        })
+      ) {
+        inboundFlushMetaRef.current.set(key, {
+          count: transfer.receivedCount,
+          atMs: nowMs,
+        });
+        syncInboundUiMap();
+      }
+    },
+    [syncInboundUiMap],
+  );
+
+  // Handle incoming binary ArrayBuffer file chunk frames
+  useEffect(() => {
+    if (!registerBinaryHandler) return;
+    return registerBinaryHandler((frame, peerId, verifiedSender) => {
+      if (!hasMatchingVerifiedPeer(verifiedSender, peerId)) return;
+      const decoded = decodeBinaryFileChunk(frame);
+      if (!decoded) return;
+      ingestInboundChunk(peerId, verifiedSender.userId, decoded.transferId, decoded.index, decoded.data);
+    });
+  }, [registerBinaryHandler, ingestInboundChunk]);
+
+  // Handle incoming JSON DataChannel control messages
   useEffect(() => {
     const getOpenPeerIds = () => {
       const openIds = new Set<string>();
@@ -230,9 +396,8 @@ export const FileShare = memo(function FileShare({
       }
       switch (message.type) {
         case "file:start": {
-          const { transferId, name, mimeType, size, totalChunks } = message;
+          const { transferId, name, mimeType, size, totalChunks, resuming } = message;
 
-          // Security and sanity checks
           if (
             typeof transferId !== "string" ||
             !transferId ||
@@ -257,8 +422,29 @@ export const FileShare = memo(function FileShare({
             break;
           }
 
-          const key = inboundKey(peerId, transferId);
-          if (inboundRef.current.size >= MAX_ACTIVE_TRANSFERS && !inboundRef.current.has(key)) {
+          const key = inboundKey(verifiedSender.userId, transferId);
+          const existingSession = inboundSessionsRef.current.get(key);
+
+          // Resume existing partial transfer from the same verified userId
+          if (
+            resuming &&
+            existingSession &&
+            !existingSession.finalized &&
+            existingSession.transfer.size === size &&
+            existingSession.transfer.totalChunks === totalChunks
+          ) {
+            existingSession.transfer.senderPeerId = peerId;
+            existingSession.transfer.paused = false;
+            syncInboundUiMap();
+            sendDirect(peerId, {
+              type: "file:resume",
+              transferId,
+              nextChunkIndex: existingSession.transfer.contiguousChunks,
+            });
+            break;
+          }
+
+          if (inboundSessionsRef.current.size >= MAX_ACTIVE_TRANSFERS && !existingSession) {
             sendDirect(peerId, {
               type: "file:reject",
               transferId,
@@ -267,98 +453,106 @@ export const FileShare = memo(function FileShare({
             break;
           }
 
-          inboundRef.current.get(key)?.receivedChunks.clear();
+          if (existingSession) {
+            existingSession.pendingHashChunks.clear();
+            void existingSession.sinkReady.then((sink) => sink.dispose()).catch(() => {});
+          }
 
           const startedAt = Date.now();
           const newInbound: InboundTransfer = {
             transferId,
-            name: (typeof name === "string" ? name : "shared_file").slice(0, 150),
-            mimeType: typeof mimeType === "string" ? mimeType : "application/octet-stream",
+            name: name.slice(0, 150),
+            mimeType: mimeType || "application/octet-stream",
             size,
             totalChunks,
             senderPeerId: peerId,
-            receivedChunks: new Map(),
+            senderUserId: verifiedSender.userId,
+            receivedCount: 0,
+            contiguousChunks: 0,
             receivedBytes: 0,
             startedAt,
+            paused: false,
           };
 
+          const sinkReady = createInboundChunkSink(key, totalChunks).then((sink) => {
+            newInbound.storageMode = sink.mode;
+            return sink;
+          });
+
+          const session: InboundSession = {
+            transfer: newInbound,
+            sink: null,
+            sinkReady,
+            receivedIndices: new Set(),
+            hasher: new IncrementalSha256(),
+            nextHashIndex: 0,
+            pendingHashChunks: new Map(),
+            writeChain: Promise.resolve(),
+            finalized: false,
+          };
+
+          inboundSessionsRef.current.set(key, session);
           inboundFlushMetaRef.current.set(key, { count: 0, atMs: startedAt });
-          const next = new Map(inboundRef.current).set(key, newInbound);
-          // Update the ref synchronously. WebRTC messages can arrive before a
-          // React effect has mirrored the setState call.
-          inboundRef.current = next;
-          setInboundTransfers(next);
+          syncInboundUiMap();
           break;
         }
 
         case "file:chunk": {
           const { transferId, index, data } = message;
-          const key = inboundKey(peerId, transferId);
-          const transfer = inboundRef.current.get(key);
-          if (!transfer || typeof index !== "number" || typeof data !== "string") {
-            break;
-          }
-
-          if (index < 0 || index >= transfer.totalChunks) {
-            break;
-          }
-
-          if (data.length > Math.ceil(CHUNK_SIZE * 4 / 3) + 8) break;
-
+          if (typeof index !== "number" || typeof data !== "string") break;
+          if (data.length > Math.ceil((CHUNK_SIZE * 4) / 3) + 16) break;
           try {
             const chunkBytes = base64ToUint8Array(data);
-            const maxChunkBytes = index === transfer.totalChunks - 1
-              ? transfer.size - CHUNK_SIZE * (transfer.totalChunks - 1)
-              : CHUNK_SIZE;
-            if (chunkBytes.byteLength > maxChunkBytes || transfer.receivedChunks.has(index)) break;
-            if (transfer.receivedBytes + chunkBytes.byteLength > transfer.size) break;
-
-            transfer.receivedChunks.set(index, chunkBytes);
-            transfer.receivedBytes += chunkBytes.byteLength;
-
-            const nowMs = Date.now();
-            const meta = inboundFlushMetaRef.current.get(key) ?? {
-              count: 0,
-              atMs: transfer.startedAt,
-            };
-            if (
-              shouldFlushInboundProgress({
-                receivedCount: transfer.receivedChunks.size,
-                totalChunks: transfer.totalChunks,
-                lastFlushedCount: meta.count,
-                lastFlushedAtMs: meta.atMs,
-                nowMs,
-              })
-            ) {
-              inboundFlushMetaRef.current.set(key, {
-                count: transfer.receivedChunks.size,
-                atMs: nowMs,
-              });
-              const next = new Map(inboundRef.current).set(key, { ...transfer });
-              inboundRef.current = next;
-              setInboundTransfers(next);
-            }
+            ingestInboundChunk(peerId, verifiedSender.userId, transferId, index, chunkBytes);
           } catch {
-            // Malformed base64 chunk, ignore
+            /* Ignore malformed base64 chunk. */
           }
           break;
         }
 
         case "file:end": {
-          const { transferId } = message;
-          const key = inboundKey(peerId, transferId);
-          const transfer = inboundRef.current.get(key);
-          if (!transfer) break;
+          const { transferId, sha256: expectedSha256 } = message;
+          const key = inboundKey(verifiedSender.userId, transferId);
+          const session = inboundSessionsRef.current.get(key);
+          if (!session || session.finalized) break;
+          session.finalized = true;
+          const transfer = session.transfer;
+          const revisionAtEnd = roomRevision.current;
 
-          if (transfer.receivedChunks.size === transfer.totalChunks) {
+          void (async () => {
             try {
-              const blob = reassembleChunks(
-                transfer.receivedChunks,
-                transfer.totalChunks,
-                transfer.mimeType,
-                { clearChunks: true },
-              );
-              if (blob.size !== transfer.size) throw new Error("File size mismatch");
+              await session.writeChain;
+              const sink = session.sink ?? (await session.sinkReady);
+              session.sink = sink;
+
+              if (session.receivedIndices.size !== transfer.totalChunks) {
+                throw new Error("Incomplete chunks");
+              }
+
+              const actualSha256 = session.hasher.digestHex();
+              if (
+                typeof expectedSha256 === "string" &&
+                expectedSha256.trim() &&
+                actualSha256 !== expectedSha256.trim().toLowerCase()
+              ) {
+                await sink.dispose();
+                if (roomRevision.current !== revisionAtEnd) return;
+                sendDirect(peerId, {
+                  type: "file:reject",
+                  transferId,
+                  reason: t("fileShare.sha256Mismatch", { name: transfer.name }),
+                });
+                onErrorToast(t("fileShare.sha256Mismatch", { name: transfer.name }));
+                return;
+              }
+
+              const blob = await sink.finalize(transfer.size, transfer.mimeType);
+              if (roomRevision.current !== revisionAtEnd) {
+                await sink.dispose();
+                return;
+              }
+
+              completedSinksRef.current.push(sink);
               const url = URL.createObjectURL(blob);
               const completedFile: ReceivedFile = {
                 transferId,
@@ -367,6 +561,9 @@ export const FileShare = memo(function FileShare({
                 size: transfer.size,
                 url,
                 receivedAt: Date.now(),
+                sha256: actualSha256,
+                blob,
+                storageMode: sink.mode,
               };
 
               setReceivedFiles((prev) => [completedFile, ...prev]);
@@ -375,32 +572,40 @@ export const FileShare = memo(function FileShare({
                 t("fileShare.receiveSuccess", {
                   name: transfer.name,
                   size: formatBytes(transfer.size),
-                })
+                }),
               );
             } catch {
-              transfer.receivedChunks.clear();
+              if (session.sink) {
+                await session.sink.dispose().catch(() => {});
+              } else {
+                await session.sinkReady.then((s) => s.dispose()).catch(() => {});
+              }
+              if (roomRevision.current !== revisionAtEnd) return;
               sendDirect(peerId, {
                 type: "file:reject",
                 transferId,
                 reason: t("fileShare.transferFailed", { name: transfer.name }),
               });
               onErrorToast(t("fileShare.transferFailed", { name: transfer.name }));
+            } finally {
+              session.pendingHashChunks.clear();
+              inboundFlushMetaRef.current.delete(key);
+              inboundSessionsRef.current.delete(key);
+              if (roomRevision.current === revisionAtEnd) {
+                syncInboundUiMap();
+              }
             }
-          } else {
-            transfer.receivedChunks.clear();
-            sendDirect(peerId, {
-              type: "file:reject",
-              transferId,
-              reason: t("fileShare.transferFailed", { name: transfer.name }),
-            });
-            onErrorToast(t("fileShare.transferFailed", { name: transfer.name }));
-          }
+          })();
+          break;
+        }
 
-          inboundFlushMetaRef.current.delete(key);
-          const next = new Map(inboundRef.current);
-          next.delete(key);
-          inboundRef.current = next;
-          setInboundTransfers(next);
+        case "file:resume": {
+          const { transferId, nextChunkIndex } = message;
+          if (typeof transferId !== "string" || typeof nextChunkIndex !== "number") break;
+          const map = outboundResumeOffsetsRef.current.get(transferId);
+          if (map) {
+            map.set(peerId, Math.max(0, Math.floor(nextChunkIndex)));
+          }
           break;
         }
 
@@ -442,6 +647,7 @@ export const FileShare = memo(function FileShare({
               return new Map(prev).set(transferId, {
                 ...transfer,
                 status: "failed",
+                resumable: transfer.sentChunks > 0 && transfer.sentChunks < transfer.totalChunks,
               });
             });
             setFileError(t("fileShare.peerRejected"));
@@ -453,20 +659,26 @@ export const FileShare = memo(function FileShare({
     });
 
     return () => unregister();
-  }, [registerMessageHandler, sendDirect, channelsRef, onSuccessToast, onErrorToast, t]);
+  }, [registerMessageHandler, sendDirect, channelsRef, ingestInboundChunk, syncInboundUiMap, onSuccessToast, onErrorToast, t]);
 
-  const handleSendFile = async (file: File) => {
-    if(readOnly) return;
+  const handleSendFile = async (file: File, resumeTransferId?: string) => {
+    if (readOnly) return;
     const revision = roomRevision.current;
-    const fail = (message: string) => { setFileError(message); onErrorToast(message); };
-    setFileError('');
+    const fail = (message: string) => {
+      setFileError(message);
+      onErrorToast(message);
+    };
+    setFileError("");
     const sizeIssue = fileSizeIssue(file.size);
-    if (sizeIssue === 'empty') { fail(t("fileShare.fileEmpty")); return; }
-    if (sizeIssue === 'too-large') {
+    if (sizeIssue === "empty") {
+      fail(t("fileShare.fileEmpty"));
+      return;
+    }
+    if (sizeIssue === "too-large") {
       fail(
         t("fileShare.fileTooLarge", {
           size: formatBytes(file.size),
-        })
+        }),
       );
       return;
     }
@@ -492,18 +704,27 @@ export const FileShare = memo(function FileShare({
       return;
     }
 
-    const transferId = crypto.randomUUID();
-    if (retryFilesRef.current.size >= MAX_ACTIVE_TRANSFERS) {
-      const releasable = Array.from(retryFilesRef.current.keys()).find(id => !activeOutboundIdsRef.current.has(id));
+    const isResume = Boolean(resumeTransferId);
+    const transferId = resumeTransferId ?? crypto.randomUUID();
+
+    if (retryFilesRef.current.size >= MAX_ACTIVE_TRANSFERS && !retryFilesRef.current.has(transferId)) {
+      const releasable = Array.from(retryFilesRef.current.keys()).find(
+        (id) => !activeOutboundIdsRef.current.has(id),
+      );
       if (releasable) retryFilesRef.current.delete(releasable);
     }
     retryFilesRef.current.set(transferId, file);
     setRetryableIds(Array.from(retryFilesRef.current.keys()));
     activeOutboundIdsRef.current.add(transferId);
+    activeTransfersCancelRef.current.delete(transferId);
+    rejectedOutboundIdsRef.current.delete(transferId);
+
     const initialRecipientState = createOutboundRecipientState(initialOpenPeers);
     outboundRecipientStateRef.current.set(transferId, initialRecipientState);
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE) || 1;
+    const resumeMap = new Map<string, number>();
+    outboundResumeOffsetsRef.current.set(transferId, resumeMap);
 
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE) || 1;
     const getActiveTargets = () => {
       const state = outboundRecipientStateRef.current.get(transferId);
       if (!state) return [];
@@ -529,7 +750,6 @@ export const FileShare = memo(function FileShare({
         throw new Error("Transfer cancelled");
       }
 
-      // Announce file start per active recipient so peers can reject independently.
       for (const peerId of startTargets) {
         sendDirect(peerId, {
           type: "file:start",
@@ -538,30 +758,61 @@ export const FileShare = memo(function FileShare({
           mimeType: file.type || "application/octet-stream",
           size: file.size,
           totalChunks,
+          ...(isResume ? { resuming: true } : {}),
         });
       }
 
-      await splitFileIntoChunks(file, async (index, total, base64Data) => {
+      if (isResume) {
+        // Give reconnected peers a short window to report their last contiguous chunk index.
+        const waitStart = Date.now();
+        while (Date.now() - waitStart < 180) {
+          if (startTargets.every((id) => resumeMap.has(id))) break;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      }
+
+      const startChunk = isResume ? resolveResumeStartChunk(resumeMap, startTargets, 0) : 0;
+      const hasher = new IncrementalSha256();
+
+      // Hash skipped prefix bytes when resuming from > 0 so final SHA-256 matches full file.
+      if (startChunk > 0) {
+        const prefixEnd = Math.min(file.size, startChunk * CHUNK_SIZE);
+        const hashWindow = 1024 * 1024;
+        for (let offset = 0; offset < prefixEnd; offset += hashWindow) {
+          if (activeTransfersCancelRef.current.has(transferId) || revision !== roomRevision.current) {
+            throw new Error("Transfer cancelled");
+          }
+          const buf = await file.slice(offset, Math.min(prefixEnd, offset + hashWindow)).arrayBuffer();
+          hasher.update(new Uint8Array(buf));
+        }
+      }
+
+      let lastUiFlushAt = 0;
+      await streamFileSlices(file, startChunk, async (index, total, bytes) => {
         if (activeTransfersCancelRef.current.has(transferId) || getActiveTargets().length === 0) {
           throw new Error("Transfer cancelled");
         }
 
-        // Backpressure monitoring scoped only to non-rejected active targets.
+        // Event-driven backpressure via bufferedamountlow
         const startedWaiting = Date.now();
-        while (
-          getActiveTargets().some((peerId) => {
+        while (true) {
+          const congestedPeer = getActiveTargets().find((peerId) => {
             const channel = channelsRef.current.get(peerId);
-            return channel && channel.readyState === "open" && channel.bufferedAmount > 65536;
-          })
-        ) {
+            return channel && channel.readyState === "open" && channel.bufferedAmount > MAX_BUFFERED_AMOUNT;
+          });
+          if (!congestedPeer) break;
           if (
             activeTransfersCancelRef.current.has(transferId) ||
-            getActiveTargets().length === 0 ||
-            Date.now() - startedWaiting > 15000
+            Date.now() - startedWaiting > 15_000
           ) {
             throw new Error("Transfer cancelled");
           }
-          await new Promise((resolve) => setTimeout(resolve, 30));
+          const ch = channelsRef.current.get(congestedPeer);
+          if (ch) {
+            await waitForChannelDrain(ch, 45);
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+          }
         }
 
         const chunkTargets = getActiveTargets();
@@ -569,25 +820,39 @@ export const FileShare = memo(function FileShare({
           throw new Error("Transfer cancelled");
         }
 
-        for (const peerId of chunkTargets) {
-          sendDirect(peerId, {
-            type: "file:chunk",
-            transferId,
-            index,
-            data: base64Data,
-          });
+        hasher.update(bytes);
+
+        if (sendBinaryDirect) {
+          const frame = encodeBinaryFileChunk(transferId, index, bytes);
+          for (const peerId of chunkTargets) {
+            sendBinaryDirect(peerId, frame);
+          }
+        } else {
+          const base64Data = uint8ArrayToBase64(bytes);
+          for (const peerId of chunkTargets) {
+            sendDirect(peerId, {
+              type: "file:chunk",
+              transferId,
+              index,
+              data: base64Data,
+            });
+          }
         }
 
-        const progress = Math.round(((index + 1) / total) * 100);
-        setOutboundTransfers((prev) => {
-          const current = prev.get(transferId);
-          if (!current) return prev;
-          return new Map(prev).set(transferId, {
-            ...current,
-            sentChunks: index + 1,
-            progress,
+        const nowMs = Date.now();
+        if (index === 0 || index + 1 === total || nowMs - lastUiFlushAt >= 80) {
+          lastUiFlushAt = nowMs;
+          const progress = Math.round(((index + 1) / total) * 100);
+          setOutboundTransfers((prev) => {
+            const current = prev.get(transferId);
+            if (!current) return prev;
+            return new Map(prev).set(transferId, {
+              ...current,
+              sentChunks: index + 1,
+              progress,
+            });
           });
-        });
+        }
       });
 
       const endTargets = getActiveTargets();
@@ -599,6 +864,7 @@ export const FileShare = memo(function FileShare({
         throw new Error("Transfer interrupted");
       }
 
+      const fileSha256 = hasher.digestHex();
       const stateWithEndSent = markOutboundEndSent(
         outboundRecipientStateRef.current.get(transferId) ?? initialRecipientState,
       );
@@ -608,6 +874,7 @@ export const FileShare = memo(function FileShare({
         sendDirect(peerId, {
           type: "file:end",
           transferId,
+          sha256: fileSha256,
         });
       }
 
@@ -638,8 +905,10 @@ export const FileShare = memo(function FileShare({
         if (!current) return prev;
         return new Map(prev).set(transferId, {
           ...current,
+          sentChunks: totalChunks,
           progress: 100,
           status: "completed",
+          sha256: fileSha256,
         });
       });
 
@@ -652,6 +921,7 @@ export const FileShare = memo(function FileShare({
         return new Map(prev).set(transferId, {
           ...current,
           status: "failed",
+          resumable: current.sentChunks > 0 && current.sentChunks < current.totalChunks,
         });
       });
       if (!rejectedOutboundIdsRef.current.has(transferId)) {
@@ -664,6 +934,7 @@ export const FileShare = memo(function FileShare({
         outboundAckWaitersRef.current.delete(transferId);
       }
       outboundRecipientStateRef.current.delete(transferId);
+      outboundResumeOffsetsRef.current.delete(transferId);
       rejectedOutboundIdsRef.current.delete(transferId);
       activeOutboundIdsRef.current.delete(transferId);
       activeTransfersCancelRef.current.delete(transferId);
@@ -675,7 +946,6 @@ export const FileShare = memo(function FileShare({
     if (files && files.length > 0) {
       void handleSendFile(files[0]);
     }
-    // Reset input so same file can be selected again
     event.target.value = "";
   };
 
@@ -712,7 +982,7 @@ export const FileShare = memo(function FileShare({
             ref={fileInputRef}
             type="file"
             className="file-hidden-input"
-            aria-label={t('fileShare.selectButton')}
+            aria-label={t("fileShare.selectButton")}
             disabled={readOnly || peersCount === 0}
             onChange={onFileInputChange}
           />
@@ -806,13 +1076,26 @@ export const FileShare = memo(function FileShare({
                       ? t("fileShare.verifyingDelivery")
                       : `${transfer.progress}%`}
                   </small>
-                  {transfer.status === 'failed' && <div className="file-retry"><span>{t("fileShare.retryHint")}</span>{retryableIds.includes(transfer.transferId) && <button type="button" className="btn btn-secondary" disabled={readOnly || peersCount === 0} onClick={() => {
-                    const file = retryFilesRef.current.get(transfer.transferId);
-                    if (!file) return;
-                    retryFilesRef.current.delete(transfer.transferId);
-                    setOutboundTransfers(previous => { const next = new Map(previous); next.delete(transfer.transferId); return next; });
-                    void handleSendFile(file);
-                  }}>{t("fileShare.retryButton")}</button>}</div>}
+                  {transfer.status === "failed" && (
+                    <div className="file-retry">
+                      <span>{t("fileShare.retryHint")}</span>
+                      {retryableIds.includes(transfer.transferId) && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={readOnly || peersCount === 0}
+                          onClick={() => {
+                            const file = retryFilesRef.current.get(transfer.transferId);
+                            if (!file) return;
+                            void handleSendFile(file, transfer.resumable ? transfer.transferId : undefined);
+                          }}
+                        >
+                          <RotateCcw size={13} aria-hidden="true" />
+                          <span>{transfer.resumable ? t("fileShare.resumeButton") : t("fileShare.retryButton")}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </article>
             );
@@ -826,10 +1109,10 @@ export const FileShare = memo(function FileShare({
           <p className="eyebrow">{t("fileShare.receivingTitle")}</p>
           {Array.from(inboundTransfers.values()).map((transfer) => {
             const progress = Math.round(
-              (transfer.receivedChunks.size / transfer.totalChunks) * 100
+              (transfer.receivedCount / transfer.totalChunks) * 100
             );
             return (
-            <article key={`${transfer.senderPeerId}:${transfer.transferId}`} className="transfer-card">
+              <article key={`${transfer.senderUserId}:${transfer.transferId}`} className="transfer-card">
                 <div className="transfer-meta">
                   <span className="transfer-name">{transfer.name}</span>
                   <span className="transfer-size">
@@ -843,7 +1126,12 @@ export const FileShare = memo(function FileShare({
                   />
                 </div>
                 <div className="transfer-footer">
-                  <small>{progress}%</small>
+                  <small className={transfer.paused ? "transfer-paused-hint" : undefined}>
+                    {transfer.paused ? t("fileShare.pausedWaitingResume", { pct: progress }) : `${progress}%`}
+                  </small>
+                  {transfer.storageMode === "disk-opfs" && (
+                    <span className="received-file-disk-badge">{t("fileShare.diskStreamBadge")}</span>
+                  )}
                 </div>
               </article>
             );
@@ -873,18 +1161,38 @@ export const FileShare = memo(function FileShare({
                     <span className="received-file-badge">{fileFormatBadge(file.name)}</span>
                     <span className="received-file-size">{formatBytes(file.size)}</span>
                     <span className="received-file-time">{formatReceivedTime(file.receivedAt)}</span>
+                    {file.storageMode === "disk-opfs" && (
+                      <span className="received-file-disk-badge">{t("fileShare.diskStreamBadge")}</span>
+                    )}
+                    {file.sha256 && (
+                      <span className="received-file-sha" title={file.sha256}>
+                        <ShieldCheck size={12} aria-hidden="true" />
+                        <span>{t("fileShare.sha256Badge", { shortHash: file.sha256.slice(0, 8) })}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
-                <a
-                  href={file.url}
-                  download={file.name}
-                  className="download-file-btn"
-                  title={`${t("fileShare.downloadButton")} ${file.name}`}
-                  aria-label={`${t("fileShare.downloadButton")}: ${file.name}`}
-                >
-                  <Download size={13} />
-                  <span>{t("fileShare.downloadButton")}</span>
-                </a>
+                <div className="received-file-actions">
+                  {savePickerSupported && file.blob && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void saveBlobWithFilePicker(file.blob!, file.name)}
+                    >
+                      <span>{t("fileShare.saveToDiskButton")}</span>
+                    </button>
+                  )}
+                  <a
+                    href={file.url}
+                    download={file.name}
+                    className="download-file-btn"
+                    title={`${t("fileShare.downloadButton")} ${file.name}`}
+                    aria-label={`${t("fileShare.downloadButton")}: ${file.name}`}
+                  >
+                    <Download size={13} />
+                    <span>{t("fileShare.downloadButton")}</span>
+                  </a>
+                </div>
               </article>
             ))}
           </div>

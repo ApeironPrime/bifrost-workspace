@@ -20,6 +20,7 @@ const READ_ONLY_ALLOWED_DC_MESSAGE_TYPES = new Set([
   'meeting-board:sync-request',
   'file:ack',
   'file:reject',
+  'file:resume',
 ]);
 
 /**
@@ -104,6 +105,11 @@ export interface DataChannelEnvelopeHandlers {
   ) => void;
   onFileShare: (
     message: Record<string, unknown>,
+    peerId: string,
+    sender: VerifiedPeerIdentity,
+  ) => void;
+  onFileBinaryChunk?: (
+    frame: ArrayBuffer,
     peerId: string,
     sender: VerifiedPeerIdentity,
   ) => void;
@@ -303,6 +309,26 @@ export function dispatchVerifiedDataChannelPayload<TChannel>(params: {
     targetRoomId: params.targetRoomId,
   });
   if (!verifiedSender) return false;
+
+  if (params.rawData instanceof ArrayBuffer || ArrayBuffer.isView(params.rawData)) {
+    const effectiveRole =
+      params.senderRole !== undefined
+        ? params.senderRole
+        : params.resolveSenderRole?.(verifiedSender, params.targetRoomId);
+    if (!canPeerSendDataChannelMessage({ messageType: 'file:binary-chunk', senderRole: effectiveRole })) {
+      return false;
+    }
+    const frame =
+      params.rawData instanceof ArrayBuffer
+        ? params.rawData
+        : (params.rawData.buffer.slice(
+            params.rawData.byteOffset,
+            params.rawData.byteOffset + params.rawData.byteLength,
+          ) as ArrayBuffer);
+    params.handlers.onFileBinaryChunk?.(frame, verifiedSender.peerId, verifiedSender);
+    return true;
+  }
+
   if (typeof params.rawData !== 'string') return false;
 
   let parsed: unknown;

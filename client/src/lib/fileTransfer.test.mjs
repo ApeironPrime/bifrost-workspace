@@ -12,9 +12,9 @@ import {
 console.log("=== KIỂM THỬ FILE TRANSFER HELPER ===");
 
 // 1. Kiểm tra hằng số kích thước
-assert.equal(MAX_FILE_SIZE, 10 * 1024 * 1024, "Giới hạn tối đa phải là 10 MB");
-assert.equal(CHUNK_SIZE, 16 * 1024, "Kích thước chunk phải là 16 KB");
-console.log("✓ Hằng số kích thước an toàn: MAX=10MB, CHUNK=16KB");
+assert.equal(MAX_FILE_SIZE, 2 * 1024 * 1024 * 1024, "Giới hạn tối đa phải là 2 GB");
+assert.equal(CHUNK_SIZE, 64 * 1024, "Kích thước chunk phải là 64 KB");
+console.log("✓ Hằng số kích thước tối ưu: MAX=2GB, CHUNK=64KB");
 
 // 2. Kiểm tra Base64 encode & decode
 const sampleData = new Uint8Array([0, 1, 2, 253, 254, 255, 65, 66, 67, 10, 13, 0]);
@@ -31,22 +31,22 @@ assert.equal(formatBytes(1024 * 1024), "1 MB");
 assert.equal(formatBytes(10 * 1024 * 1024), "10 MB");
 console.log("✓ Format dung lượng chính xác (B, KB, MB)");
 
-// 4. Kiểm tra mô phỏng chia và ghép chunks (100 KB data > 6 chunks 16KB)
-const testSize = 100 * 1024; // 100 KB
+// 4. Kiểm tra mô phỏng chia và ghép chunks (300 KB data -> 5 chunks 64KB)
+const testSize = 300 * 1024; // 300 KB
 const originalBytes = new Uint8Array(testSize);
 for (let i = 0; i < testSize; i++) {
   originalBytes[i] = i % 256;
 }
 
 const totalExpectedChunks = Math.ceil(testSize / CHUNK_SIZE);
-assert.equal(totalExpectedChunks, 7, "100 KB chia chunk 16KB phải ra 7 chunks");
+assert.equal(totalExpectedChunks, 5, "300 KB chia chunk 64KB phải ra 5 chunks");
 
 const receivedMap = new Map();
 for (let i = 0; i < totalExpectedChunks; i++) {
   const start = i * CHUNK_SIZE;
   const end = Math.min(testSize, start + CHUNK_SIZE);
   const chunkSlice = originalBytes.subarray(start, end);
-  assert(chunkSlice.byteLength <= CHUNK_SIZE, "Mỗi chunk không vượt quá 16 KB");
+  assert(chunkSlice.byteLength <= CHUNK_SIZE, "Mỗi chunk không vượt quá 64 KB");
 
   // Giả lập gửi qua network dưới dạng base64 và nhận lại
   const b64 = uint8ArrayToBase64(chunkSlice);
