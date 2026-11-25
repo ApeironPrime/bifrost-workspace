@@ -269,26 +269,6 @@ function App() {
     addToast(msg, "error");
   }, [addToast]);
 
-  const {
-    micEnabled,
-    camEnabled,
-    screenSharing,
-    mediaError,
-    localVideoStream,
-    remoteStreams,
-    attachPeerMediaHandlers,
-    removePeerMedia,
-    stopAllRoomMedia,
-    toggleMic,
-    toggleCam,
-    toggleScreenShare,
-  } = useRoomMedia({
-    peersRef,
-    activeRoomRef,
-    t,
-    onErrorToast: handleErrorToast,
-  });
-
   const handleChatScroll = useCallback(() => {
     const log = chatLogRef.current;
     if (log) chatAtBottomRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 100;
@@ -399,6 +379,47 @@ function App() {
   // Realtime & P2P states
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>({ kind: "idle" });
   const [onlinePeers, setOnlinePeers] = useState<PresencePeer[]>([]);
+  const remotePeerCount = useMemo(
+    () => onlinePeers.filter((peer) => peer.userId !== user?.id).length,
+    [onlinePeers, user?.id],
+  );
+  const {
+    micEnabled,
+    camEnabled,
+    screenSharing,
+    noiseSuppression,
+    backgroundBlur,
+    mediaError,
+    localAudioStream,
+    localVideoStream,
+    remoteStreams,
+    peerStats,
+    meshProfile,
+    audioInputs,
+    videoInputs,
+    audioOutputs,
+    selectedMicId,
+    selectedCamId,
+    selectedSpeakerId,
+    speakerSelectionSupported,
+    attachPeerMediaHandlers,
+    removePeerMedia,
+    stopAllRoomMedia,
+    toggleMic,
+    toggleCam,
+    toggleScreenShare,
+    toggleNoiseSuppression,
+    toggleBackgroundBlur,
+    selectMicrophone,
+    selectCamera,
+    selectSpeaker,
+  } = useRoomMedia({
+    peersRef,
+    activeRoomRef,
+    remotePeerCount,
+    t,
+    onErrorToast: handleErrorToast,
+  });
   const [peersCount, setPeersCount] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [noteShared, setNoteShared] = useState(false);
@@ -3243,12 +3264,29 @@ function App() {
                       micEnabled={micEnabled}
                       camEnabled={camEnabled}
                       screenSharing={screenSharing}
+                      noiseSuppression={noiseSuppression}
+                      backgroundBlur={backgroundBlur}
                       mediaError={mediaError}
+                      localAudioStream={localAudioStream}
                       localVideoStream={localVideoStream}
                       remoteStreams={remoteStreams}
+                      peerStats={peerStats}
+                      meshProfile={meshProfile}
+                      audioInputs={audioInputs}
+                      videoInputs={videoInputs}
+                      audioOutputs={audioOutputs}
+                      selectedMicId={selectedMicId}
+                      selectedCamId={selectedCamId}
+                      selectedSpeakerId={selectedSpeakerId}
+                      speakerSelectionSupported={speakerSelectionSupported}
                       onToggleMic={() => void toggleMic()}
                       onToggleCam={() => void toggleCam()}
                       onToggleScreenShare={() => void toggleScreenShare()}
+                      onToggleNoiseSuppression={() => void toggleNoiseSuppression()}
+                      onToggleBackgroundBlur={() => void toggleBackgroundBlur()}
+                      onSelectMicrophone={(deviceId) => void selectMicrophone(deviceId)}
+                      onSelectCamera={(deviceId) => void selectCamera(deviceId)}
+                      onSelectSpeaker={selectSpeaker}
                       onLeaveRoom={leaveRoom}
                       onCopyRoomId={handleCopyCurrentRoomId}
                       copiedRoomId={copiedRoomId}

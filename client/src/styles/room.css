@@ -3416,3 +3416,156 @@
     max-height: 92px;
   }
 }
+
+/* =========================================================
+   Adaptive P2P Mesh, Active Speaker, Network Telemetry & Device Settings
+   ========================================================= */
+
+.workspace-edition .meeting-grid.count-many {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-auto-rows: minmax(175px, 1fr);
+}
+
+.workspace-edition .video-tile.is-speaking {
+  border-color: rgba(143, 191, 152, 0.85);
+  box-shadow:
+    0 0 0 2px rgba(143, 191, 152, 0.28),
+    0 14px 30px rgba(9, 21, 16, 0.28);
+}
+
+.tile-head-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tile-device-state.is-speaking {
+  background: rgba(58, 125, 86, 0.88);
+  border-color: rgba(164, 218, 178, 0.6);
+  color: #f6f4ea;
+}
+
+.tile-net-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid rgba(213, 211, 183, 0.22);
+  background: rgba(16, 30, 24, 0.72);
+  color: #d9d6c2;
+  backdrop-filter: blur(6px);
+}
+
+.tile-net-badge.is-good {
+  color: #9be0ac;
+  border-color: rgba(155, 224, 172, 0.35);
+}
+
+.tile-net-badge.is-fair {
+  color: #f0ca7d;
+  border-color: rgba(240, 202, 125, 0.4);
+}
+
+.tile-net-badge.is-poor {
+  color: #f29d91;
+  border-color: rgba(242, 157, 145, 0.45);
+}
+
+.chamber-mesh-pill {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #c9a780;
+  border: 1px solid rgba(201, 167, 128, 0.32);
+  background: rgba(20, 38, 31, 0.55);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.meeting-controls-anchor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
+  z-index: 4;
+}
+
+.workspace-edition.room-focused .meeting-controls-anchor {
+  position: sticky;
+  bottom: 0;
+}
+
+.meeting-settings-popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(320px, calc(100vw - 32px));
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface-panel, #172a22);
+  color: var(--text-main, #ede9d9);
+  border: 1px solid rgba(201, 167, 128, 0.35);
+  box-shadow: 0 18px 42px rgba(7, 15, 11, 0.48);
+  z-index: 20;
+}
+
+.meeting-settings-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.meeting-settings-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.meeting-settings-mesh-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11px;
+  color: #c9a780;
+  background: rgba(201, 167, 128, 0.14);
+  border: 1px solid rgba(201, 167, 128, 0.28);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.meeting-settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meeting-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meeting-settings-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted, #b8c2ba);
+}
+
+.meeting-settings-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-muted, #b8c2ba);
+}
+
+.workspace-edition .control-btn.is-active {
+  background: rgba(143, 191, 152, 0.2);
+  border-color: rgba(143, 191, 152, 0.55);
+  color: #eef5ee;
+}
