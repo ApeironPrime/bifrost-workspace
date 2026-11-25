@@ -7,7 +7,7 @@
     "dev": "npm run build && node dist/index.js",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test tests/test_validation.mjs tests/test_auth_ratelimit.mjs tests/test_turn.mjs tests/test_scale_security.mjs && node tests/test_stage5.mjs"
+    "test": "npm run build && node --test tests/test_validation.mjs tests/test_auth_ratelimit.mjs tests/test_turn.mjs tests/test_scale_security.mjs tests/test_account_onboarding.mjs && node tests/test_stage5.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

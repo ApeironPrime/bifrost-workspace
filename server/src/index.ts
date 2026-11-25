@@ -19,6 +19,7 @@ import {
 import { createTurnServiceFromEnv } from "./lib/turn.js";
 import { authRouter } from "./routes/auth.js";
 import { createAvatarRouter } from "./routes/avatars.js";
+import { createInviteRouter } from "./routes/invites.js";
 import { roomRouter } from "./routes/rooms.js";
 import { createTurnRouter } from "./routes/turn.js";
 import { createWorkspaceRouter } from "./routes/workspaces.js";
@@ -94,6 +95,7 @@ async function bootstrap() {
 
   app.use("/api/avatars", createAvatarRouter());
   app.use("/api/auth", authRouter);
+  app.use("/api/invites", createInviteRouter(prisma));
   app.use(
     "/api/workspaces",
     createWorkspaceRouter(prisma, {

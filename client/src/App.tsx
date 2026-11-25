@@ -96,6 +96,12 @@ import {
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { apiUrl, fetchAppApi, isDevMockSession, SIGNALING_URL } from "./lib/appApi";
 import {
+  getNotificationPermissionState,
+  playIncomingCallChime,
+  requestBrowserNotificationPermission,
+  showBrowserCallNotification,
+} from "./lib/callNotification";
+import {
   createRoomIceManager,
   inspectPeerSelectedCandidateType,
   shouldRestartPeerForIceRenewal,
@@ -143,7 +149,15 @@ import './styles/index.css';
 
 const EMPTY_USER_IDS = new Set<string>();
 
-type User = { id: string; name: string; email: string; createdAt: string; profile?: { avatarDataUrl?: string | null; completedAt: string } | null };
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified?: boolean;
+  twoFactorEnabled?: boolean;
+  createdAt: string;
+  profile?: { avatarDataUrl?: string | null; completedAt: string } | null;
+};
 type Workspace = { id: string; name: string; slug: string; role: "OWNER" | "MEMBER" };
 type Room = {
   id: string;
@@ -327,6 +341,27 @@ function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState("");
+  const [twoFactorLoginCode, setTwoFactorLoginCode] = useState("");
+  const [pendingInvite, setPendingInvite] = useState<{
+    token: string;
+    workspaceName: string;
+    inviterName: string;
+  } | null>(null);
+  const [generatedInviteUrl, setGeneratedInviteUrl] = useState("");
+  const [generatingInviteLink, setGeneratingInviteLink] = useState(false);
+  const [emailVerifyCode, setEmailVerifyCode] = useState("");
+  const [emailVerifyDevCode, setEmailVerifyDevCode] = useState("");
+  const [emailVerifyBusy, setEmailVerifyBusy] = useState(false);
+  const [twoFactorSetupSecret, setTwoFactorSetupSecret] = useState("");
+  const [twoFactorSetupCode, setTwoFactorSetupCode] = useState("");
+  const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState<string[]>([]);
+  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+  const [twoFactorError, setTwoFactorError] = useState("");
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    getNotificationPermissionState(),
+  );
+  const notifySocketRef = useRef<Socket | null>(null);
 
   const [discardForm,setDiscardForm] = useState<'profile'|'workspace'|'editWorkspace'|'room'|'editRoom'|'invite'|null>(null);
   // Profile states
@@ -841,6 +876,146 @@ function App() {
     userIdRef.current = userId ?? "";
     hlcRef.current.setNodeId(userId || "anon");
   }, [userId]);
+
+  // Handle #invite=..., #verify_email=..., #oauth_success=1, and #oauth_error=... hashes on boot
+  useEffect(() => {
+    const rawHash = window.location.hash.replace(/^#/, "");
+    const rawSearch = window.location.search.replace(/^\?/, "");
+    const params = new URLSearchParams(rawHash.includes("=") ? rawHash : rawSearch);
+
+    const inviteToken = params.get("invite")?.trim();
+    const verifyEmailToken = params.get("verify_email")?.trim();
+    const oauthSuccess = params.get("oauth_success");
+    const oauthError = params.get("oauth_error");
+
+    if (inviteToken) {
+      sessionStorage.setItem("bifrost_pending_invite", inviteToken);
+      void fetchAppApi(apiUrl(`/invites/${encodeURIComponent(inviteToken)}`))
+        .then(async (res) => {
+          if (!res.ok) return;
+          const body = (await res.json()) as {
+            invite?: { workspaceName: string; inviterName: string };
+          };
+          if (body.invite) {
+            setPendingInvite({
+              token: inviteToken,
+              workspaceName: body.invite.workspaceName,
+              inviterName: body.invite.inviterName,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
+    if (verifyEmailToken) {
+      void fetchAppApi(apiUrl("/auth/verify-email"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: verifyEmailToken }),
+      })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const body = (await res.json()) as { user?: User };
+          if (body.user) setUser(body.user);
+          addToast(t("profile.emailVerifiedToast"), "success");
+        })
+        .catch(() => {});
+    }
+
+    if (oauthSuccess === "1") {
+      localStorage.setItem("bifrost_has_session", "1");
+      void refreshAccessToken();
+    } else if (oauthError) {
+      queueMicrotask(() => addToast(t("auth.authFailed"), "error"));
+    }
+
+    if (inviteToken || verifyEmailToken || oauthSuccess || oauthError) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, [addToast, refreshAccessToken, t]);
+
+  // Auto-accept pending 1-click workspace invite once signed in
+  useEffect(() => {
+    if (!userId || !token || isDevMockSession(token)) return;
+    const inviteToken = sessionStorage.getItem("bifrost_pending_invite");
+    if (!inviteToken) return;
+    let cancelled = false;
+    void fetchAppApi(apiUrl(`/invites/${encodeURIComponent(inviteToken)}/accept`), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then(async (res) => {
+        sessionStorage.removeItem("bifrost_pending_invite");
+        if (cancelled) return;
+        setPendingInvite(null);
+        const body = (await res.json().catch(() => ({}))) as {
+          workspace?: Workspace;
+          message?: string;
+        };
+        if (!res.ok || !body.workspace) {
+          addToast(body.message || t("workspace.inviteAcceptFailed"), "error");
+          return;
+        }
+        setWorkspaceRetry((v) => v + 1);
+        setSelectedWorkspaceId(body.workspace.id);
+        addToast(t("workspace.inviteAcceptedToast", { name: body.workspace.name }), "success");
+      })
+      .catch(() => {
+        sessionStorage.removeItem("bifrost_pending_invite");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, token, addToast, t]);
+
+  // Live incoming meeting call notifications (sound + toast + browser push)
+  useEffect(() => {
+    if (!token || !userId || isDevMockSession(token)) return;
+    const notifySocket = io(SIGNALING_URL || undefined, {
+      auth: { token },
+      withCredentials: true,
+      transports: ["websocket", "polling"],
+    });
+    notifySocketRef.current = notifySocket;
+
+    notifySocket.on(
+      "workspace:room-active",
+      (payload: {
+        workspaceId: string;
+        workspaceName: string;
+        roomId: string;
+        roomName: string;
+        caller: { id: string; name: string };
+      }) => {
+        if (payload.caller.id === userId) return;
+        if (activeRoomRef.current?.id === payload.roomId) return;
+        const message = t("toasts.incomingRoomCall", {
+          caller: payload.caller.name,
+          room: payload.roomName,
+          space: payload.workspaceName,
+        });
+        playIncomingCallChime();
+        addToast(message, "info");
+        showBrowserCallNotification({
+          title: payload.roomName,
+          body: message,
+          onClick: () => {
+            setSelectedWorkspaceId(payload.workspaceId);
+          },
+        });
+      },
+    );
+
+    return () => {
+      if (notifySocketRef.current === notifySocket) {
+        notifySocketRef.current = null;
+      }
+      notifySocket.disconnect();
+    };
+  }, [token, userId, addToast, t]);
   const userName = user?.name;
   const userEmail = user?.email;
   const memoCurrentUser = useMemo(
@@ -979,6 +1154,32 @@ function App() {
     setAuthError("");
     setAuthSubmitting(true);
     try {
+      if (twoFactorChallengeToken) {
+        const response = await fetchAppApi(apiUrl("/auth/2fa/verify"), {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            challengeToken: twoFactorChallengeToken,
+            code: twoFactorLoginCode.trim(),
+          }),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message ?? t("auth.authFailed"));
+        localStorage.setItem("bifrost_has_session", "1");
+        localStorage.removeItem("bifrost_token");
+        localStorage.removeItem("bifrost_refresh_token");
+        setTwoFactorChallengeToken("");
+        setTwoFactorLoginCode("");
+        setWorkspaceLoading(true);
+        setWorkspaceLoadError(false);
+        setToken(body.token);
+        setUser(body.user);
+        memberNameRef.current = body.user.name;
+        setAuthPassword("");
+        return;
+      }
+
       const payload =
         authMode === "register"
           ? { name: authName, email: authEmail, password: authPassword }
@@ -994,6 +1195,14 @@ function App() {
       );
       const body = await response.json();
       if (!response.ok) throw new Error(body.message ?? t("auth.authFailed"));
+      if (body.requiresTwoFactor && body.challengeToken) {
+        setTwoFactorChallengeToken(body.challengeToken);
+        setTwoFactorLoginCode("");
+        return;
+      }
+      if (body.devVerificationCode) {
+        setEmailVerifyDevCode(String(body.devVerificationCode));
+      }
       if (isDevMockSession(body.token)) {
         localStorage.setItem("bifrost_token", body.token);
       } else {
@@ -1198,6 +1407,22 @@ function App() {
     setInviteError("");
     setInviteSubmitting(true);
     try {
+      if (!isDevMockSession(token)) {
+        const response = await fetchAppApi(apiUrl(`/workspaces/${selectedWorkspaceId}/invites`), {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ email: inviteEmail }),
+        });
+        const body = response.status === 204 ? {} : await response.json();
+        if (!response.ok) throw new Error(body.message);
+        setInviteEmail("");
+        if (typeof body.inviteUrl === "string") {
+          setGeneratedInviteUrl(body.inviteUrl);
+        }
+        addToast(t("workspace.inviteEmailSentToast"), "success");
+        return;
+      }
+
       const response = await fetchAppApi(apiUrl(`/workspaces/${selectedWorkspaceId}/members`), {
         method: "POST",
         headers: authHeaders(),
@@ -1216,6 +1441,147 @@ function App() {
       addToast(errText, "error");
     } finally {
       setInviteSubmitting(false);
+    }
+  };
+
+  const createOneClickInviteLink = async () => {
+    if (!selectedWorkspaceId || generatingInviteLink || isDevMockSession(token)) return;
+    setInviteError("");
+    setGeneratingInviteLink(true);
+    try {
+      const response = await fetchAppApi(apiUrl(`/workspaces/${selectedWorkspaceId}/invites`), {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("workspace.inviteFailed"));
+      if (typeof body.inviteUrl === "string") {
+        setGeneratedInviteUrl(body.inviteUrl);
+        try {
+          await navigator.clipboard.writeText(body.inviteUrl);
+          addToast(t("workspace.inviteLinkCopiedToast"), "success");
+        } catch {
+          // Clipboard permission may be restricted; link stays visible to copy manually.
+        }
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : t("workspace.inviteFailed");
+      setInviteError(msg);
+    } finally {
+      setGeneratingInviteLink(false);
+    }
+  };
+
+  const handleSendEmailVerification = async () => {
+    if (emailVerifyBusy || isDevMockSession(token)) return;
+    setEmailVerifyBusy(true);
+    try {
+      const response = await fetchAppApi(apiUrl("/auth/resend-verification"), {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("profile.verificationFailed"));
+      if (body.user) setUser(body.user);
+      if (body.devVerificationCode) setEmailVerifyDevCode(String(body.devVerificationCode));
+      addToast(t("profile.verificationSentToast"), "success");
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : t("profile.verificationFailed"), "error");
+    } finally {
+      setEmailVerifyBusy(false);
+    }
+  };
+
+  const handleVerifyEmailCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (emailVerifyBusy || isDevMockSession(token)) return;
+    setEmailVerifyBusy(true);
+    try {
+      const response = await fetchAppApi(apiUrl("/auth/verify-email"), {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ code: emailVerifyCode.trim() }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("profile.verificationFailed"));
+      if (body.user) setUser(body.user);
+      setEmailVerifyCode("");
+      setEmailVerifyDevCode("");
+      addToast(t("profile.emailVerifiedToast"), "success");
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : t("profile.verificationFailed"), "error");
+    } finally {
+      setEmailVerifyBusy(false);
+    }
+  };
+
+  const handleSetupTwoFactor = async () => {
+    if (twoFactorBusy || isDevMockSession(token)) return;
+    setTwoFactorError("");
+    setTwoFactorBusy(true);
+    try {
+      const response = await fetchAppApi(apiUrl("/auth/2fa/setup"), {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("profile.twoFactorActionFailed"));
+      setTwoFactorSetupSecret(body.secret ?? "");
+      setTwoFactorRecoveryCodes([]);
+    } catch (error) {
+      setTwoFactorError(error instanceof Error ? error.message : t("profile.twoFactorActionFailed"));
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const handleEnableTwoFactor = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (twoFactorBusy || isDevMockSession(token)) return;
+    setTwoFactorError("");
+    setTwoFactorBusy(true);
+    try {
+      const response = await fetchAppApi(apiUrl("/auth/2fa/enable"), {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ code: twoFactorSetupCode.trim() }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("profile.twoFactorActionFailed"));
+      if (body.user) setUser(body.user);
+      setTwoFactorRecoveryCodes(Array.isArray(body.recoveryCodes) ? body.recoveryCodes : []);
+      setTwoFactorSetupSecret("");
+      setTwoFactorSetupCode("");
+      addToast(t("profile.twoFactorEnabledToast"), "success");
+    } catch (error) {
+      setTwoFactorError(error instanceof Error ? error.message : t("profile.twoFactorActionFailed"));
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const handleDisableTwoFactor = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (twoFactorBusy || isDevMockSession(token)) return;
+    setTwoFactorError("");
+    setTwoFactorBusy(true);
+    try {
+      const response = await fetchAppApi(apiUrl("/auth/2fa/disable"), {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ code: twoFactorSetupCode.trim() }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || t("profile.twoFactorActionFailed"));
+      if (body.user) setUser(body.user);
+      setTwoFactorSetupCode("");
+      setTwoFactorRecoveryCodes([]);
+      addToast(t("profile.twoFactorDisabledToast"), "success");
+    } catch (error) {
+      setTwoFactorError(error instanceof Error ? error.message : t("profile.twoFactorActionFailed"));
+    } finally {
+      setTwoFactorBusy(false);
     }
   };
 
@@ -2775,7 +3141,16 @@ function App() {
         mode={authMode} lang={lang} theme={theme}
         name={authName} email={authEmail} password={authPassword}
         error={authError} submitting={authSubmitting}
+        twoFactorChallenge={Boolean(twoFactorChallengeToken)}
+        twoFactorCode={twoFactorLoginCode}
+        pendingInvite={pendingInvite}
         onName={setAuthName} onEmail={setAuthEmail} onPassword={setAuthPassword}
+        onTwoFactorCode={setTwoFactorLoginCode}
+        onCancelTwoFactor={() => {
+          setTwoFactorChallengeToken("");
+          setTwoFactorLoginCode("");
+          setAuthError("");
+        }}
         onLanguage={toggleLang} onTheme={toggleTheme}
         onMode={() => {
           setAuthMode(authMode === "login" ? "register" : "login");
@@ -4254,6 +4629,178 @@ function App() {
                 </div>
               </form>
             )}
+            {!isDevMockSession(token) && (
+              <div className="form-stack profile-security-form">
+                <hr className="modal-section-divider" />
+                <p className="eyebrow">{t("profile.emailVerificationHeading")}</p>
+                <p className="form-field-hint">
+                  {user.emailVerified ? t("profile.emailVerifiedBadge") : t("profile.emailUnverifiedBadge")}
+                </p>
+                {!user.emailVerified && (
+                  <>
+                    <div className="modal-actions">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={emailVerifyBusy}
+                        onClick={() => void handleSendEmailVerification()}
+                      >
+                        {emailVerifyBusy ? t("profile.sendingVerification") : t("profile.sendVerificationButton")}
+                      </button>
+                    </div>
+                    {emailVerifyDevCode && (
+                      <p className="form-field-hint">
+                        {t("profile.verificationDevCodeHint", { code: emailVerifyDevCode })}
+                      </p>
+                    )}
+                    <form onSubmit={handleVerifyEmailCode} className="form-stack">
+                      <div className="form-field">
+                        <label htmlFor="modal-verify-email-code" className="form-field-label">
+                          <span>{t("profile.verificationCodeLabel")}</span>
+                        </label>
+                        <input
+                          id="modal-verify-email-code"
+                          type="text"
+                          inputMode="numeric"
+                          required
+                          minLength={6}
+                          maxLength={6}
+                          className="input-text"
+                          placeholder={t("profile.verificationCodePlaceholder")}
+                          value={emailVerifyCode}
+                          onChange={(e) => setEmailVerifyCode(e.target.value)}
+                          disabled={emailVerifyBusy}
+                        />
+                      </div>
+                      <div className="modal-actions">
+                        <button type="submit" className="btn btn-primary" disabled={emailVerifyBusy}>
+                          {emailVerifyBusy ? t("profile.verifyingEmail") : t("profile.verifyEmailButton")}
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                )}
+
+                <hr className="modal-section-divider" />
+                <p className="eyebrow">{t("profile.twoFactorHeading")}</p>
+                <p className="form-field-hint">
+                  {user.twoFactorEnabled ? t("profile.twoFactorEnabledBadge") : t("profile.twoFactorDisabledBadge")}
+                </p>
+                {!user.twoFactorEnabled && !twoFactorSetupSecret && (
+                  <div className="modal-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={twoFactorBusy}
+                      onClick={() => void handleSetupTwoFactor()}
+                    >
+                      {twoFactorBusy ? t("profile.settingUpTwoFactor") : t("profile.setupTwoFactorButton")}
+                    </button>
+                  </div>
+                )}
+                {!user.twoFactorEnabled && twoFactorSetupSecret && (
+                  <form onSubmit={handleEnableTwoFactor} className="form-stack">
+                    <div className="form-field">
+                      <label htmlFor="modal-2fa-secret" className="form-field-label">
+                        <span>{t("profile.twoFactorSecretLabel")}</span>
+                      </label>
+                      <input
+                        id="modal-2fa-secret"
+                        type="text"
+                        readOnly
+                        className="input-text"
+                        value={twoFactorSetupSecret}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="modal-2fa-enable-code" className="form-field-label">
+                        <span>{t("profile.twoFactorCodeInputLabel")}</span>
+                      </label>
+                      <input
+                        id="modal-2fa-enable-code"
+                        type="text"
+                        inputMode="numeric"
+                        required
+                        minLength={6}
+                        maxLength={6}
+                        className="input-text"
+                        placeholder={t("profile.twoFactorCodePlaceholder")}
+                        value={twoFactorSetupCode}
+                        onChange={(e) => setTwoFactorSetupCode(e.target.value)}
+                        disabled={twoFactorBusy}
+                      />
+                    </div>
+                    <div className="modal-actions">
+                      <button type="submit" className="btn btn-primary" disabled={twoFactorBusy}>
+                        {twoFactorBusy ? t("profile.enablingTwoFactor") : t("profile.enableTwoFactorButton")}
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {user.twoFactorEnabled && (
+                  <form onSubmit={handleDisableTwoFactor} className="form-stack">
+                    <div className="form-field">
+                      <label htmlFor="modal-2fa-disable-code" className="form-field-label">
+                        <span>{t("profile.twoFactorCodeInputLabel")}</span>
+                      </label>
+                      <input
+                        id="modal-2fa-disable-code"
+                        type="text"
+                        required
+                        minLength={6}
+                        maxLength={32}
+                        className="input-text"
+                        placeholder={t("profile.twoFactorCodePlaceholder")}
+                        value={twoFactorSetupCode}
+                        onChange={(e) => setTwoFactorSetupCode(e.target.value)}
+                        disabled={twoFactorBusy}
+                      />
+                    </div>
+                    <div className="modal-actions">
+                      <button type="submit" className="btn btn-secondary" disabled={twoFactorBusy}>
+                        {twoFactorBusy ? t("profile.disablingTwoFactor") : t("profile.disableTwoFactorButton")}
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {twoFactorRecoveryCodes.length > 0 && (
+                  <div className="form-field">
+                    <p className="form-field-hint">{t("profile.twoFactorRecoveryHeading")}</p>
+                    <code>{twoFactorRecoveryCodes.join(" · ")}</code>
+                  </div>
+                )}
+                {twoFactorError && (
+                  <p className="form-error" role="alert">
+                    {twoFactorError}
+                  </p>
+                )}
+
+                <hr className="modal-section-divider" />
+                <p className="eyebrow">{t("profile.notificationsHeading")}</p>
+                <p className="form-field-hint">
+                  {notificationPermission === "granted"
+                    ? t("profile.notificationsEnabled")
+                    : notificationPermission === "denied"
+                      ? t("profile.notificationsBlocked")
+                      : t("profile.notificationsPrompt")}
+                </p>
+                {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
+                  <div className="modal-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() =>
+                        void requestBrowserNotificationPermission().then((perm) =>
+                          setNotificationPermission(perm),
+                        )
+                      }
+                    >
+                      {t("profile.enableNotificationsButton")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </div>
       </MotionPresence>
@@ -4799,6 +5346,50 @@ function App() {
                 </button>
               </div>
             </form>
+            {!isDevMockSession(token) && (
+              <div className="form-stack profile-security-form">
+                <hr className="modal-section-divider" />
+                <p className="eyebrow">{t("workspace.inviteLinkHeading")}</p>
+                <p className="form-field-hint">{t("workspace.inviteLinkHint")}</p>
+                {generatedInviteUrl && (
+                  <div className="form-field">
+                    <input
+                      type="text"
+                      readOnly
+                      className="input-text"
+                      value={generatedInviteUrl}
+                      aria-label={t("workspace.inviteLinkHeading")}
+                    />
+                  </div>
+                )}
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={generatingInviteLink}
+                    onClick={() => void createOneClickInviteLink()}
+                  >
+                    {generatingInviteLink
+                      ? t("workspace.creatingInviteLink")
+                      : t("workspace.createInviteLinkButton")}
+                  </button>
+                  {generatedInviteUrl && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(generatedInviteUrl).then(() => {
+                          addToast(t("workspace.inviteLinkCopiedToast"), "success");
+                        });
+                      }}
+                    >
+                      <Copy size={14} aria-hidden="true" />
+                      <span>{t("workspace.copyInviteLinkButton")}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </MotionPresence>

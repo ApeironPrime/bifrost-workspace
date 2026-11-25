@@ -2,6 +2,12 @@ import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import {
+  createWorkspaceInvite,
+  InviteServiceError,
+  listWorkspaceInvites,
+  revokeWorkspaceInvite,
+} from "../services/invite.service.js";
+import {
   createRoomLabel,
   createWorkspace,
   createWorkspaceRoom,
@@ -65,8 +71,14 @@ const memberRoomRoleSchema = z.object({
   labelIds: z.array(z.string().uuid()).max(12, "Nhãn vượt quá 12 nhãn.").optional(),
 });
 
+const createInviteSchema = z.object({
+  email: z.string().trim().email("Email không hợp lệ.").max(254).optional(),
+  maxUses: z.number().int().min(1).max(100).optional(),
+  ttlDays: z.number().int().min(1).max(30).optional(),
+});
+
 function handleWorkspaceError(error: unknown, response: Response, next: NextFunction) {
-  if (error instanceof WorkspaceServiceError) {
+  if (error instanceof WorkspaceServiceError || error instanceof InviteServiceError) {
     response.status(error.status).json({ message: error.message });
     return;
   }
@@ -146,6 +158,49 @@ export function createWorkspaceController(db: PrismaClient, options: WorkspaceRo
               input.email,
             ),
           );
+      } catch (error) {
+        handleWorkspaceError(error, response, next);
+      }
+    },
+
+    listInvites: async (request: Request, response: Response, next: NextFunction) => {
+      try {
+        response.json(
+          await listWorkspaceInvites(db, paramStr(request.params.workspaceId), request.user!.id),
+        );
+      } catch (error) {
+        handleWorkspaceError(error, response, next);
+      }
+    },
+
+    createInvite: async (request: Request, response: Response, next: NextFunction) => {
+      try {
+        const input = createInviteSchema.parse(request.body ?? {});
+        const originHeader = request.get("origin")?.trim();
+        response.status(201).json(
+          await createWorkspaceInvite(db, {
+            workspaceId: paramStr(request.params.workspaceId),
+            actorUserId: request.user!.id,
+            email: input.email,
+            maxUses: input.maxUses,
+            ttlDays: input.ttlDays,
+            clientBaseUrl: originHeader,
+          }),
+        );
+      } catch (error) {
+        handleWorkspaceError(error, response, next);
+      }
+    },
+
+    revokeInvite: async (request: Request, response: Response, next: NextFunction) => {
+      try {
+        await revokeWorkspaceInvite(
+          db,
+          paramStr(request.params.workspaceId),
+          paramStr(request.params.inviteId),
+          request.user!.id,
+        );
+        response.status(204).send();
       } catch (error) {
         handleWorkspaceError(error, response, next);
       }

@@ -17,6 +17,7 @@ const WORKSPACE_ID_RULE = { param: "workspaceId", message: "ID workspace không 
 const USER_ID_RULE = { param: "userId", message: "ID thành viên không hợp lệ." } as const;
 const ROOM_ID_RULE = { param: "roomId", message: "ID phòng không hợp lệ." } as const;
 const LABEL_ID_RULE = { param: "labelId", message: "ID nhãn không hợp lệ." } as const;
+const INVITE_ID_RULE = { param: "inviteId", message: "ID lời mời không hợp lệ." } as const;
 
 /**
  * Builds the workspaces router with injectable Prisma client and optional lifecycle hooks.
@@ -39,6 +40,9 @@ export function createWorkspaceRouter(
 
   router.get("/:workspaceId/members", validateUuidParams(WORKSPACE_ID_RULE), controller.listMembers);
   router.post("/:workspaceId/members", validateUuidParams(WORKSPACE_ID_RULE), controller.inviteMember);
+  router.get("/:workspaceId/invites", validateUuidParams(WORKSPACE_ID_RULE), controller.listInvites);
+  router.post("/:workspaceId/invites", validateUuidParams(WORKSPACE_ID_RULE), controller.createInvite);
+  router.delete("/:workspaceId/invites/:inviteId", validateUuidParams(WORKSPACE_ID_RULE, INVITE_ID_RULE), controller.revokeInvite);
   router.patch("/:workspaceId/members/:userId", validateUuidParams(WORKSPACE_ID_RULE, USER_ID_RULE), controller.updateMemberRole);
   router.delete("/:workspaceId/members/:userId", validateUuidParams(WORKSPACE_ID_RULE, USER_ID_RULE), controller.removeMember);
 

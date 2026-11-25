@@ -6,7 +6,7 @@ export type AuthUser = {
   email: string;
 };
 
-function jwtSecret() {
+export function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET chưa được cấu hình.");
   return secret;
@@ -14,18 +14,37 @@ function jwtSecret() {
 
 export function createAccessToken(user: AuthUser) {
   const expiresIn = (process.env.JWT_ACCESS_EXPIRES_IN ?? "15m") as SignOptions["expiresIn"];
-  return jwt.sign({ email: user.email }, jwtSecret(), {
+  return jwt.sign({ email: user.email }, getJwtSecret(), {
     subject: user.id,
     expiresIn,
   });
 }
 
 export function verifyAccessToken(token: string): AuthUser {
-  const payload = jwt.verify(token, jwtSecret());
+  const payload = jwt.verify(token, getJwtSecret());
   if (typeof payload === "string" || !payload.sub || typeof payload.email !== "string") {
     throw new Error("Token không hợp lệ.");
   }
   return { id: payload.sub, email: payload.email };
+}
+
+export function createTwoFactorChallengeToken(userId: string): string {
+  return jwt.sign({ purpose: "2fa_challenge" }, getJwtSecret(), {
+    subject: userId,
+    expiresIn: "5m",
+  });
+}
+
+export function verifyTwoFactorChallengeToken(token: string): { userId: string } {
+  const payload = jwt.verify(token, getJwtSecret());
+  if (
+    typeof payload === "string" ||
+    !payload.sub ||
+    payload.purpose !== "2fa_challenge"
+  ) {
+    throw new Error("Mã phiên xác thực 2 lớp không hợp lệ hoặc đã hết hạn.");
+  }
+  return { userId: payload.sub };
 }
 
 export function createOpaqueRefreshToken(): string {

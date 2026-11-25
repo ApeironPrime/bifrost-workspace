@@ -13,6 +13,17 @@ export function createAuthRouter(db: PrismaClient = prisma) {
   router.post("/login", getAuthRateLimiters().loginAccountLimiter, controller.login);
   router.post("/refresh", controller.refresh);
   router.post("/logout", controller.logout);
+  router.post("/verify-email", controller.verifyEmail);
+  router.post("/resend-verification", requireAuth, controller.resendVerification);
+  router.post("/forgot-password", getAuthRateLimiters().loginIpLimiter, controller.forgotPassword);
+  router.post("/reset-password", getAuthRateLimiters().loginIpLimiter, controller.resetPassword);
+  router.post("/2fa/verify", getAuthRateLimiters().loginIpLimiter, controller.verifyTwoFactor);
+  router.post("/2fa/setup", requireAuth, controller.setupTwoFactor);
+  router.post("/2fa/enable", requireAuth, controller.enableTwoFactor);
+  router.post("/2fa/disable", requireAuth, controller.disableTwoFactor);
+  router.get("/oauth/providers", controller.oauthProviders);
+  router.get("/oauth/:provider/start", controller.oauthStart);
+  router.get("/oauth/:provider/callback", controller.oauthCallback);
   router.post("/change-password", requireAuth, controller.changePassword);
   router.get("/me", requireAuth, controller.me);
   router.patch("/me", requireAuth, controller.updateMe);

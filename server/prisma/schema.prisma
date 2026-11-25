@@ -20,22 +20,63 @@ enum RoomAccessRole {
 }
 
 model User {
-  id                   String            @id @default(uuid()) @db.Uuid
-  name                 String            @db.VarChar(100)
-  email                String            @unique @db.VarChar(254)
-  passwordHash         String            @map("password_hash")
-  createdAt            DateTime          @default(now()) @map("created_at")
-  updatedAt            DateTime          @updatedAt @map("updated_at")
+  id                   String              @id @default(uuid()) @db.Uuid
+  name                 String              @db.VarChar(100)
+  email                String              @unique @db.VarChar(254)
+  passwordHash         String              @map("password_hash")
+  emailVerifiedAt      DateTime?           @map("email_verified_at")
+  totpSecret           String?             @map("totp_secret") @db.VarChar(128)
+  totpEnabledAt        DateTime?           @map("totp_enabled_at")
+  totpRecoveryHashes   String[]            @default([]) @map("totp_recovery_hashes")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
   profile              UserProfile?
-  ownedWorkspaces      Workspace[]       @relation("WorkspaceOwner")
+  ownedWorkspaces      Workspace[]         @relation("WorkspaceOwner")
   workspaceMemberships WorkspaceMember[]
-  hostedRooms          Room[]            @relation("HostedRooms")
-  createdRooms         Room[]            @relation("CreatedRooms")
+  hostedRooms          Room[]              @relation("HostedRooms")
+  createdRooms         Room[]              @relation("CreatedRooms")
   roomMemberships      RoomMember[]
   roomNotes            UserRoomNote[]
   refreshTokens        RefreshToken[]
+  verificationTokens   VerificationToken[]
+  oauthAccounts        OAuthAccount[]
+  createdInvites       WorkspaceInvite[]   @relation("InviteCreator")
 
   @@map("users")
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+model VerificationToken {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  purpose   VerificationPurpose
+  tokenHash String              @unique @map("token_hash") @db.VarChar(128)
+  codeHash  String              @map("code_hash") @db.VarChar(128)
+  expiresAt DateTime            @map("expires_at")
+  usedAt    DateTime?           @map("used_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("verification_tokens")
+}
+
+model OAuthAccount {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  provider          String   @db.VarChar(32)
+  providerAccountId String   @map("provider_account_id") @db.VarChar(191)
+  email             String?  @db.VarChar(254)
+  createdAt         DateTime @default(now()) @map("created_at")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
 }
 
 model RefreshToken {
@@ -73,8 +114,28 @@ model Workspace {
   rooms       Room[]
   roomMembers RoomMember[]
   roomRoles   RoomLabel[]
+  invites     WorkspaceInvite[]
 
   @@map("workspaces")
+}
+
+model WorkspaceInvite {
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  createdById  String    @map("created_by_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash") @db.VarChar(128)
+  invitedEmail String?   @map("invited_email") @db.VarChar(254)
+  maxUses      Int?      @map("max_uses")
+  useCount     Int       @default(0) @map("use_count")
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User      @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([invitedEmail])
+  @@map("workspace_invites")
 }
 
 model WorkspaceMember {

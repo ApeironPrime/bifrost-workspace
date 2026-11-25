@@ -66,6 +66,7 @@ docker compose -f docker-compose.prod.yml up -d --build
   - `REDIS_URL`: Bật `@socket.io/redis-adapter` + `RedisRateLimitStore` chia sẻ trạng thái signaling và rate-limit giữa nhiều replica backend (mặc định fallback single-node khi bỏ trống).
   - **Avatar Storage**: Lưu ảnh đại diện dạng content-addressed JPEG trên S3/R2 hoặc volume `/api/avatars/<sha256>.jpg` thay vì nhét Base64 vào PostgreSQL.
   - **Token Hardening**: Refresh token nằm trong cookie `HttpOnly; SameSite=Lax; Path=/api/auth` (`bifrost_rt`), Access token giữ hoàn toàn trong bộ nhớ RAM phía client.
+  - **Tài khoản & Onboarding**: Hỗ trợ xác minh Email OTP 6 số, Quên/Đặt lại mật khẩu, OAuth2 (Google/GitHub), bảo mật 2 lớp (2FA TOTP + Recovery Codes), liên kết mời 1-click (`/#invite=...`) và thông báo đẩy + chuông báo khi mở phòng họp (`workspace:room-active`).
 
 ## Kiểm thử tự động
 

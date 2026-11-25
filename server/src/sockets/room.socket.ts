@@ -59,6 +59,45 @@ export function attachRoomSocket(io: Server, db: PrismaClient) {
 
   io.on("connection", (socket) => {
     console.info(`Socket connected: ${socket.id} (user: ${socket.data.user.email})`);
+    void socket.join(`user:${socket.data.user.id}`);
+
+    const lastRingByRoom = new Map<string, number>();
+
+    async function notifyWorkspaceMembersOfActiveRoom(
+      room: {
+        id: string;
+        name: string;
+        workspaceId: string;
+        hostId: string | null;
+        workspace: { name: string; ownerId: string };
+      },
+      caller: { id: string; name: string },
+    ) {
+      try {
+        const roomMembers = await db.roomMember.findMany({
+          where: { workspaceId: room.workspaceId, roomId: room.id },
+          select: { userId: true },
+        });
+        const targetUserIds = new Set<string>([room.workspace.ownerId]);
+        if (room.hostId) targetUserIds.add(room.hostId);
+        for (const entry of roomMembers) {
+          targetUserIds.add(entry.userId);
+        }
+        targetUserIds.delete(caller.id);
+        if (targetUserIds.size === 0) return;
+
+        const channels = [...targetUserIds].map((uid) => `user:${uid}`);
+        io.to(channels).emit("workspace:room-active", {
+          workspaceId: room.workspaceId,
+          workspaceName: room.workspace.name,
+          roomId: room.id,
+          roomName: room.name,
+          caller: { id: caller.id, name: caller.name },
+        });
+      } catch (error) {
+        console.error("[socket] notifyWorkspaceMembersOfActiveRoom error:", error);
+      }
+    }
 
     // Server only relays WebRTC metadata; realtime media & DataChannel payloads travel P2P.
     socket.on("room:join", async (rawRoomId: unknown) => {
@@ -196,9 +235,33 @@ export function attachRoomSocket(io: Server, db: PrismaClient) {
           peerId: socket.id,
           user: socket.data.user,
         });
+
+        if (peers.length === 0) {
+          lastRingByRoom.set(roomId, Date.now());
+          void notifyWorkspaceMembersOfActiveRoom(room, socket.data.user);
+        }
       } catch (error) {
         console.error("Lỗi khi tham gia room:", error);
         socket.emit("room:error", { message: "Đã xảy ra lỗi khi tham gia room." });
+      }
+    });
+
+    socket.on("room:ring", async (rawRoomId: unknown) => {
+      const parsedRoomId = roomIdSchema.safeParse(rawRoomId);
+      if (!parsedRoomId.success) return;
+      const roomId = parsedRoomId.data;
+      if (!socket.rooms.has(`room:${roomId}`)) return;
+      const now = Date.now();
+      const last = lastRingByRoom.get(roomId) ?? 0;
+      if (now - last < 30_000) return;
+      lastRingByRoom.set(roomId, now);
+
+      const room = await db.room.findUnique({
+        where: { id: roomId },
+        include: { workspace: { select: { name: true, ownerId: true } } },
+      });
+      if (room) {
+        await notifyWorkspaceMembersOfActiveRoom(room, socket.data.user);
       }
     });
 

@@ -1,3 +1,4 @@
+import { apiUrl } from '../../lib/appApi'
 import { AuthActionDialog } from './AuthActionDialog'
 import { MotionPresence } from '../../shared/components/MotionPresence'
 import { useTabTransition } from '../room/hooks/useTabTransition'
@@ -18,7 +19,10 @@ import './AuthScreen.css'
 type Props = {
   mode: 'login' | 'register'; lang: Language; theme: 'light' | 'dark'
   name: string; email: string; password: string; error: string; submitting: boolean
+  twoFactorChallenge?: boolean; twoFactorCode?: string
+  pendingInvite?: { workspaceName: string; inviterName: string; token: string } | null
   onName: (value: string) => void; onEmail: (value: string) => void; onPassword: (value: string) => void
+  onTwoFactorCode?: (value: string) => void; onCancelTwoFactor?: () => void
   onMode: () => void; onLanguage: (lang: Props['lang']) => void; onTheme: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
@@ -31,7 +35,8 @@ export function AuthScreen(props: Props) {
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [confirmTouched, setConfirmTouched] = useState(false)
   const [capsLock, setCapsLock] = useState(false)
-  const [action, setAction] = useState<'Google' | 'Facebook' | 'reset' | null>(null)
+  const [showResetDialog, setShowResetDialog] = useState(false)
+  const [oauthNotice, setOauthNotice] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const confirmInput = useRef<HTMLInputElement>(null)
   const entry = useRef<HTMLElement>(null)
@@ -101,11 +106,11 @@ export function AuthScreen(props: Props) {
     })
   }
 
-  const previewLabel = t('auth.previewBadge')
-  const previewProviders = [
+  const oauthProviders = [
     {
-      id: 'Google' as const,
-      ariaLabel: t('auth.continueWithPreviewAria', { provider: 'Google' }),
+      id: 'google' as const,
+      label: 'Google',
+      ariaLabel: t('auth.continueWithProvider', { provider: 'Google' }),
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
           <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.61 4.61 0 0 1-2 3.03v2.52h3.24c1.9-1.75 2.98-4.33 2.98-7.38Z"/>
@@ -116,16 +121,27 @@ export function AuthScreen(props: Props) {
       ),
     },
     {
-      id: 'Facebook' as const,
-      ariaLabel: t('auth.continueWithPreviewAria', { provider: 'Facebook' }),
+      id: 'github' as const,
+      label: 'GitHub',
+      ariaLabel: t('auth.continueWithProvider', { provider: 'GitHub' }),
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="11" fill="#1877F2"/>
-          <path fill="#fff" d="M13.5 23v-8.5h2.9l.44-3.4H13.5V8.93c0-.98.27-1.65 1.68-1.65H17V4.24A24 24 0 0 0 14.35 4c-2.62 0-4.42 1.6-4.42 4.54v2.56H7v3.4h2.93V23z"/>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2Z"/>
         </svg>
       ),
     },
   ]
+
+  const startOAuth = (provider: 'google' | 'github', label: string) => {
+    if (import.meta.env.VITE_DATA_MODE !== 'api' && !window.location.origin.includes('5173')) {
+      setOauthNotice(t('auth.oauthUnavailableNotice', { provider: label }))
+      return
+    }
+    const inviteQuery = props.pendingInvite?.token
+      ? `?invite=${encodeURIComponent(props.pendingInvite.token)}`
+      : ''
+    window.location.assign(`${apiUrl(`/auth/oauth/${provider}/start`)}${inviteQuery}`)
+  }
 
   const passwordDescribedBy = [
     register ? 'auth-password-hint' : '',
@@ -163,9 +179,41 @@ export function AuthScreen(props: Props) {
     <section ref={entry} className="auth-entry" aria-labelledby="auth-title">
       <div className="auth-entry-emblem" aria-hidden="true"><svg viewBox="0 0 50 26" fill="none"><path d="M3 23C13 23 12 3 25 3s12 20 22 20"/><path d="M7 23C16 23 15 8 25 8s9 15 18 15"/></svg></div>
       <div className="auth-form-area" inert={modeChanging}>
-        <div className="auth-form-title" key={mode}><span>{register ? t('auth.registerStep') : t('auth.signInStep')}</span><h1 id="auth-title">{register ? t('auth.registerTitle') : t('auth.signInTitle')}</h1><p>{register ? t('auth.registerSubtitle') : t('auth.signInSubtitle')}</p></div>
+        <div className="auth-form-title" key={props.twoFactorChallenge ? '2fa' : mode}>
+          <span>{props.twoFactorChallenge ? t('auth.twoFactorStep') : register ? t('auth.registerStep') : t('auth.signInStep')}</span>
+          <h1 id="auth-title">{props.twoFactorChallenge ? t('auth.twoFactorTitle') : register ? t('auth.registerTitle') : t('auth.signInTitle')}</h1>
+          <p>{props.twoFactorChallenge ? t('auth.twoFactorSubtitle') : register ? t('auth.registerSubtitle') : t('auth.signInSubtitle')}</p>
+        </div>
+        {props.pendingInvite && (
+          <p className="auth-preview-status" role="status">
+            {t('auth.inviteBanner', {
+              workspaceName: props.pendingInvite.workspaceName,
+              inviterName: props.pendingInvite.inviterName,
+            })}
+          </p>
+        )}
         <form onSubmit={handleFormSubmit} aria-busy={submitting}>
           <fieldset disabled={submitting}>
+            {props.twoFactorChallenge ? (
+              <div className="auth-field">
+                <label className="auth-field-label" htmlFor="auth-2fa-code">
+                  <span>{t('auth.twoFactorCodeLabel')}</span>
+                  <span className="auth-required-mark" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="auth-2fa-code"
+                  name="totp"
+                  autoComplete="one-time-code"
+                  required
+                  minLength={6}
+                  maxLength={32}
+                  value={props.twoFactorCode ?? ''}
+                  onChange={e => props.onTwoFactorCode?.(e.target.value)}
+                  placeholder={t('auth.twoFactorCodePlaceholder')}
+                />
+              </div>
+            ) : (
+            <>
             {register && (
               <div className="auth-field">
                 <label className="auth-field-label" htmlFor="auth-name">
@@ -300,53 +348,73 @@ export function AuthScreen(props: Props) {
               <button
                 className="auth-recovery-link"
                 type="button"
-                aria-label={t('auth.forgotPasswordPreviewAria')}
-                onClick={() => setAction('reset')}
+                aria-label={t('auth.forgotPasswordAria')}
+                onClick={() => setShowResetDialog(true)}
               >
                 <span className="auth-recovery-text">
                   {t('auth.forgotPassword')}
                 </span>
-                <span className="auth-preview-badge">{previewLabel}</span>
               </button>
             )}
+            </>
+            )}
             {error && <p className="auth-form-error" role="alert">{error}</p>}
+            {oauthNotice && <p className="auth-preview-status" role="status">{oauthNotice}</p>}
             <button className="auth-submit" type="submit" disabled={submitting} aria-busy={submitting || undefined}>
-              <span>{submitting ? t('auth.submitting') : register ? t('auth.registerButton') : t('auth.signInButton')}</span>
+              <span>
+                {submitting
+                  ? t('auth.submitting')
+                  : props.twoFactorChallenge
+                    ? t('auth.twoFactorVerifyButton')
+                    : register
+                      ? t('auth.registerButton')
+                      : t('auth.signInButton')}
+              </span>
               {submitting ? <span className="auth-submit-spinner" aria-hidden="true"/> : <ArrowUpRight size={21} aria-hidden="true"/>}
             </button>
+            {props.twoFactorChallenge && props.onCancelTwoFactor && (
+              <button
+                type="button"
+                className="auth-recovery-link"
+                onClick={props.onCancelTwoFactor}
+              >
+                <span className="auth-recovery-text">{t('auth.twoFactorCancel')}</span>
+              </button>
+            )}
           </fieldset>
         </form>
-        {!register && (
+        {!register && !props.twoFactorChallenge && (
           <div className="auth-providers">
             <div className="auth-email-divider">
-              <span>{t('auth.orPreviewOptions')}</span>
+              <span>{t('auth.oauthDivider')}</span>
             </div>
             <div
               className="auth-provider-row"
               role="group"
-              aria-label={t('auth.previewOptionsGroupAria')}
+              aria-label={t('auth.oauthGroupAria')}
             >
-              {previewProviders.map(provider => (
+              {oauthProviders.map(provider => (
                 <button
                   key={provider.id}
                   type="button"
                   disabled={submitting || modeChanging}
                   aria-label={provider.ariaLabel}
-                  onClick={() => setAction(provider.id)}
+                  onClick={() => startOAuth(provider.id, provider.label)}
                 >
                   <span className="auth-provider-main">
                     {provider.icon}
-                    <span>{provider.id}</span>
+                    <span>{provider.label}</span>
                   </span>
-                  <span className="auth-preview-badge">{previewLabel}</span>
                 </button>
               ))}
             </div>
           </div>
         )}
-        <p className="auth-switch-copy">{register ? t('auth.haveAccount') : t('auth.noAccount')} <button type="button" disabled={submitting || modeChanging} onClick={switchMode}>{register ? t('auth.switchToSignIn') : t('auth.switchToRegister')}</button></p>
+        {!props.twoFactorChallenge && (
+          <p className="auth-switch-copy">{register ? t('auth.haveAccount') : t('auth.noAccount')} <button type="button" disabled={submitting || modeChanging} onClick={switchMode}>{register ? t('auth.switchToSignIn') : t('auth.switchToRegister')}</button></p>
+        )}
       </div>
     </section>
-    <MotionPresence present={!!action}>{action && <AuthActionDialog action={action} lang={lang} onClose={() => setAction(null)}/>}</MotionPresence>
+    <MotionPresence present={showResetDialog}>{showResetDialog && <AuthActionDialog initialEmail={email} lang={lang} onClose={() => setShowResetDialog(false)}/>}</MotionPresence>
   </main>
 }

@@ -59,6 +59,15 @@ const workspaceVi = {
     deleteConfirmAction: 'Xóa vĩnh viễn',
     deletedToast: 'Đã xóa không gian làm việc "{name}".',
     deleteFailed: 'Không thể xóa không gian làm việc.',
+    inviteLinkHeading: 'Hoặc chia sẻ liên kết mời 1-click',
+    inviteLinkHint: 'Bất kỳ ai có liên kết đều có thể đăng nhập hoặc tạo tài khoản mới để vào thẳng không gian làm việc này.',
+    createInviteLinkButton: 'Tạo liên kết mời',
+    creatingInviteLink: 'Đang tạo liên kết…',
+    copyInviteLinkButton: 'Sao chép liên kết',
+    inviteLinkCopiedToast: 'Đã sao chép liên kết mời.',
+    inviteEmailSentToast: 'Đã gửi lời mời qua email kèm liên kết tham gia.',
+    inviteAcceptedToast: 'Đã tham gia không gian làm việc "{name}".',
+    inviteAcceptFailed: 'Liên kết mời không hợp lệ hoặc đã hết hạn.',
   },
   members: {
     modalTitle: 'Thành viên không gian làm việc',
@@ -257,6 +266,7 @@ const workspaceVi = {
     peerJoined: '"{name}" đã tham gia phòng.',
     peerLeft: '"{name}" đã rời phòng.',
     p2pConnected: 'Đã kết nối P2P trực tiếp với thành viên trong phòng.',
+    incomingRoomCall: '{caller} đang mở phòng "{room}" trong {space}.',
   },
 } as const
 
@@ -319,6 +329,15 @@ const workspaceEn = {
     deleteConfirmAction: 'Delete workspace',
     deletedToast: 'Deleted workspace "{name}".',
     deleteFailed: 'Could not delete workspace.',
+    inviteLinkHeading: 'Or share a 1-click invite link',
+    inviteLinkHint: 'Anyone with this link can sign in or create an account to join this workspace directly.',
+    createInviteLinkButton: 'Create invite link',
+    creatingInviteLink: 'Creating link…',
+    copyInviteLinkButton: 'Copy link',
+    inviteLinkCopiedToast: 'Invite link copied.',
+    inviteEmailSentToast: 'Invitation email sent with a join link.',
+    inviteAcceptedToast: 'Joined workspace "{name}".',
+    inviteAcceptFailed: 'Invite link is invalid or expired.',
   },
   members: {
     modalTitle: 'Workspace members',
@@ -514,6 +533,7 @@ const workspaceEn = {
     peerJoined: '{name} joined the room.',
     peerLeft: '{name} left the room.',
     p2pConnected: 'Connected to your teammate.',
+    incomingRoomCall: '{caller} started a meeting in "{room}" ({space}).',
   },
 } as const satisfies WorkspaceShape
 
@@ -573,6 +593,15 @@ const workspaceJa = {
     deleteConfirmAction: '完全に削除',
     deletedToast: 'ワークスペース「{name}」を削除しました。',
     deleteFailed: 'ワークスペースを削除できませんでした。',
+    inviteLinkHeading: 'または1クリック招待リンクを共有',
+    inviteLinkHint: 'リンクを受け取った人はログインまたは新規登録後にすぐ参加できます。',
+    createInviteLinkButton: '招待リンクを作成',
+    creatingInviteLink: '作成中…',
+    copyInviteLinkButton: 'リンクをコピー',
+    inviteLinkCopiedToast: '招待リンクをコピーしました。',
+    inviteEmailSentToast: '参加リンク付きの招待メールを送信しました。',
+    inviteAcceptedToast: 'ワークスペース「{name}」に参加しました。',
+    inviteAcceptFailed: '招待リンクが無効か期限切れです。',
   },
   members: {
     modalTitle: 'ワークスペースメンバー',
@@ -769,6 +798,7 @@ const workspaceJa = {
     peerJoined: '「{name}」がルームに参加しました。',
     peerLeft: '「{name}」がルームを退出しました。',
     p2pConnected: 'ルーム内のメンバーとP2P接続が確立しました。',
+    incomingRoomCall: '{caller}さんが「{room}」（{space}）で通話を開始しました。',
   },
 } as const satisfies WorkspaceShape
 
