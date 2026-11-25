@@ -18,9 +18,20 @@ import './theme-surfaces.css'
 // Keep the workspace, networking libraries and application styles off the landing-page path.
 const App = lazy(() => import('../../App'))
 
+function isWorkspaceEntryHash(hash: string): boolean {
+  return (
+    hash.startsWith('#workspace') ||
+    hash.startsWith('#invite=') ||
+    hash.startsWith('#verify_email=') ||
+    hash.startsWith('#oauth_success=') ||
+    hash.startsWith('#oauth_error=') ||
+    hash.startsWith('#reset_token=')
+  )
+}
+
 export default function Homepage() {
   const [workspace, setWorkspace] = useState(() => {
-    const active = window.location.hash.startsWith('#workspace')
+    const active = isWorkspaceEntryHash(window.location.hash)
     if (active) beginWorkspaceTransition()
     return active
   })
@@ -28,7 +39,7 @@ export default function Homepage() {
   const [isDark, setIsDark] = useState(() => localStorage.getItem('bifrost_theme') === 'dark')
   useEffect(() => {
     const onHash = () => {
-      const inWorkspace = window.location.hash.startsWith('#workspace')
+      const inWorkspace = isWorkspaceEntryHash(window.location.hash)
       if (inWorkspace) {
         beginWorkspaceTransition()
       } else {

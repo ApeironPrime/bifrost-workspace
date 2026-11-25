@@ -1,0 +1,124 @@
+name: Bifrost CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  client-static-and-unit:
+    name: Client TypeCheck, Lint, Unit & i18n AST, Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npx tsc -p tsconfig.app.json --noEmit
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  server-integration-and-e2e:
+    name: Server Build, Unit, Integration & Stage 5 E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bifrost
+          POSTGRES_PASSWORD: bifrost_ci_password
+          POSTGRES_DB: bifrost_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bifrost -d bifrost_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://bifrost:bifrost_ci_password@localhost:5432/bifrost_db?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci_test_jwt_secret_change_me_123456
+      RATE_LIMIT_HMAC_SECRET: ci_test_hmac_secret_123456
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx prisma migrate deploy --config prisma7.config.ts
+      - run: npm test
+
+  playwright-webrtc-e2e:
+    name: Multi-Tab Chromium WebRTC P2P E2E
+    runs-on: ubuntu-latest
+    needs: [client-static-and-unit, server-integration-and-e2e]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bifrost
+          POSTGRES_PASSWORD: bifrost_ci_password
+          POSTGRES_DB: bifrost_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bifrost -d bifrost_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://bifrost:bifrost_ci_password@localhost:5432/bifrost_db?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci_playwright_jwt_secret_123456
+      RATE_LIMIT_HMAC_SECRET: ci_playwright_hmac_secret_123456
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build server
+        working-directory: server
+        run: |
+          npm ci
+          npx prisma migrate deploy --config prisma7.config.ts
+          npm run build
+      - name: Install client and Playwright Chromium
+        working-directory: client
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run Multi-Tab WebRTC E2E
+        working-directory: client
+        run: npm run test:e2e

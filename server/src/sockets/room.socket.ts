@@ -2,6 +2,7 @@ import type { Server, Socket } from "socket.io";
 import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { verifyAccessToken } from "../lib/auth.js";
+import type { MetricsRegistry } from "../lib/observability.js";
 import { getRoomPresence, type RoomPresencePeer } from "../lib/revocation.js";
 
 const roomIdSchema = z.string().uuid("Mã room không hợp lệ.");
@@ -32,7 +33,11 @@ function findSharedRoom(socket: Socket, target: Socket): string | undefined {
  * Registers Socket.IO JWT authentication, room membership/ACL checks, presence
  * broadcasts, and WebRTC signaling relay (`offer`, `answer`, `ice-candidate`).
  */
-export function attachRoomSocket(io: Server, db: PrismaClient) {
+export function attachRoomSocket(
+  io: Server,
+  db: PrismaClient,
+  metricsRegistry?: MetricsRegistry,
+) {
   io.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
     if (typeof token !== "string" || !token.trim()) {
@@ -59,6 +64,9 @@ export function attachRoomSocket(io: Server, db: PrismaClient) {
 
   io.on("connection", (socket) => {
     console.info(`Socket connected: ${socket.id} (user: ${socket.data.user.email})`);
+    if (metricsRegistry) {
+      metricsRegistry.socketConnectedClients += 1;
+    }
     void socket.join(`user:${socket.data.user.id}`);
 
     const lastRingByRoom = new Map<string, number>();
@@ -300,12 +308,27 @@ export function attachRoomSocket(io: Server, db: PrismaClient) {
           peerId: socket.id,
           payload: parsedSignal.data.payload,
         });
+        if (metricsRegistry) {
+          metricsRegistry.webrtcSignalsRelayedTotal.set(
+            eventName,
+            (metricsRegistry.webrtcSignalsRelayedTotal.get(eventName) ?? 0) + 1,
+          );
+        }
       });
     };
 
     relaySignal("webrtc:offer");
     relaySignal("webrtc:answer");
     relaySignal("webrtc:ice-candidate");
+
+    socket.on("disconnect", () => {
+      if (metricsRegistry) {
+        metricsRegistry.socketConnectedClients = Math.max(
+          0,
+          metricsRegistry.socketConnectedClients - 1,
+        );
+      }
+    });
 
     socket.on("disconnecting", async () => {
       const roomKeys = [...socket.rooms].filter((roomId) => roomId.startsWith("room:"));

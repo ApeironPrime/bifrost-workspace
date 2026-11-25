@@ -67,6 +67,7 @@ docker compose -f docker-compose.prod.yml up -d --build
   - **Avatar Storage**: Lưu ảnh đại diện dạng content-addressed JPEG trên S3/R2 hoặc volume `/api/avatars/<sha256>.jpg` thay vì nhét Base64 vào PostgreSQL.
   - **Token Hardening**: Refresh token nằm trong cookie `HttpOnly; SameSite=Lax; Path=/api/auth` (`bifrost_rt`), Access token giữ hoàn toàn trong bộ nhớ RAM phía client.
   - **Tài khoản & Onboarding**: Hỗ trợ xác minh Email OTP 6 số, Quên/Đặt lại mật khẩu, OAuth2 (Google/GitHub), bảo mật 2 lớp (2FA TOTP + Recovery Codes), liên kết mời 1-click (`/#invite=...`) và thông báo đẩy + chuông báo khi mở phòng họp (`workspace:room-active`).
+  - **Kiến trúc Modular & Vận hành (DevOps/QA)**: Tách `App.tsx` thành các feature views/hooks/modals (`AppSidebar`, `AppHeader`, `DashboardView`, `RoomWorkspaceView`, `ProfileSecurityModal`, `WorkspaceModals`), tích hợp Prometheus `GET /api/metrics` + `POST /api/telemetry/errors` + `AppErrorBoundary`, pipeline `.github/workflows/ci.yml` và kiểm thử đa tab Chromium WebRTC P2P (`npm run test:e2e`).
 
 ## Kiểm thử tự động
 

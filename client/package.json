@@ -13,6 +13,7 @@
     "test:ui-state": "node --test dev/roomUiState.test.ts",
     "test:i18n": "node --test dev/i18n.test.mjs",
     "test": "node --test dev/*.test.ts dev/i18n.test.mjs src/lib/fileTransfer.test.mjs",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

@@ -4,6 +4,7 @@ import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { ZodError } from "zod";
+import { createHttpMetricsMiddleware, createMetricsRegistry } from "./lib/observability.js";
 import { prisma } from "./lib/prisma.js";
 import {
   RATE_LIMIT_EXPOSED_HEADERS,
@@ -20,6 +21,7 @@ import { createTurnServiceFromEnv } from "./lib/turn.js";
 import { authRouter } from "./routes/auth.js";
 import { createAvatarRouter } from "./routes/avatars.js";
 import { createInviteRouter } from "./routes/invites.js";
+import { createObservabilityRouter } from "./routes/observability.js";
 import { roomRouter } from "./routes/rooms.js";
 import { createTurnRouter } from "./routes/turn.js";
 import { createWorkspaceRouter } from "./routes/workspaces.js";
@@ -27,6 +29,7 @@ import { attachRoomSocket } from "./sockets/room.socket.js";
 
 const app = express();
 app.set("trust proxy", parseTrustProxySetting(process.env.TRUST_PROXY));
+const metricsRegistry = createMetricsRegistry();
 const turnService = createTurnServiceFromEnv();
 const httpServer = createServer(app);
 const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -72,6 +75,7 @@ app.use(
     exposedHeaders: [...RATE_LIMIT_EXPOSED_HEADERS],
   }),
 );
+app.use(createHttpMetricsMiddleware(metricsRegistry));
 app.use(express.json({ limit: "512kb" }));
 
 async function bootstrap() {
@@ -94,6 +98,7 @@ async function bootstrap() {
   });
 
   app.use("/api/avatars", createAvatarRouter());
+  app.use("/api", createObservabilityRouter(metricsRegistry));
   app.use("/api/auth", authRouter);
   app.use("/api/invites", createInviteRouter(prisma));
   app.use(
@@ -124,12 +129,13 @@ async function bootstrap() {
         response.status(400).json({ message: error.issues[0]?.message ?? "Dữ liệu không hợp lệ." });
         return;
       }
+      metricsRegistry.serverErrorsTotal += 1;
       console.error(error);
       response.status(500).json({ message: "Đã xảy ra lỗi máy chủ." });
     },
   );
 
-  attachRoomSocket(io, prisma);
+  attachRoomSocket(io, prisma, metricsRegistry);
 
   const shutdown = async () => {
     await Promise.allSettled([redisCluster.close(), authRateLimiters.shutdown()]);

@@ -1,5 +1,3 @@
-import { ConfirmDialog } from './shared/components/ConfirmDialog'
-import { MotionPresence } from './shared/components/MotionPresence'
 import { useTabTransition } from './features/room/hooks/useTabTransition'
 import { tabDirection } from './lib/tabDirection'
 import { useRoomTabIndicator } from './features/room/hooks/useRoomTabIndicator'
@@ -8,7 +6,6 @@ import {
   getNextRoomTab,
   roomPanelElementId,
   roomTabElementId,
-  roomTabTabIndex,
   syncEmptyTabPanelTabIndex,
   type RoomTabId,
 } from './lib/roomTabs'
@@ -50,40 +47,10 @@ import {
 } from './lib/chatNotes'
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { io, type Socket } from "socket.io-client";
-import {
-  Video,
-  Columns3,
-  MessageSquare,
-  FileText,
-  FolderUp,
-  LayoutDashboard,
-  PanelRightClose,
-  PanelLeftClose,
-  PanelRightOpen,
-  LogOut,
-  Plus,
-  FolderPlus,
-  X,
-  ArrowRight,
-  Copy,
-  Check,
-  UserPlus,
-  Users,
-  Lock,
-  RotateCcw,
-  ChevronLeft,
-  Eye,
-  Crown,
-  ShieldCheck,
-  Settings2,
-  Trash2,
-} from "lucide-react";
-import { MeetingBoard, type MeetingBoardMessage } from "./features/room/components/MeetingBoard";
-import { FileShare, type FileShareMessage } from "./features/room/components/FileShare";
-import { MeetingTab } from "./features/room/components/MeetingTab";
+import { type MeetingBoardMessage } from "./features/room/components/MeetingBoard";
+import { type FileShareMessage } from "./features/room/components/FileShare";
 import { ToastContainer, type ToastItem, type ToastType } from "./shared/components/Toast";
 import {
-  LOCALE_META,
   formatInviteError,
   formatRoomError,
   formatWorkspaceError,
@@ -95,12 +62,7 @@ import {
 } from "./i18n";
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { apiUrl, fetchAppApi, isDevMockSession, SIGNALING_URL } from "./lib/appApi";
-import {
-  getNotificationPermissionState,
-  playIncomingCallChime,
-  requestBrowserNotificationPermission,
-  showBrowserCallNotification,
-} from "./lib/callNotification";
+import { getNotificationPermissionState } from "./lib/callNotification";
 import {
   createRoomIceManager,
   inspectPeerSelectedCandidateType,
@@ -119,22 +81,19 @@ import {
   negotiatePeerOffer,
   type PeerSignalingRecord,
 } from "./lib/peerSignaling";
-import { BifrostMark } from "./features/homepage/components/UI";
-import { AvatarPicker } from './shared/components/AvatarPicker';
-import { AccountMenu } from './shared/components/AccountMenu';
 import { ProfileOnboarding } from './features/auth/ProfileOnboarding';
-import { SearchField } from './shared/components/SearchField';
-import { UserAvatar } from './shared/components/UserAvatar';
-import { WorkspaceMembers } from './features/workspace/WorkspaceMembers';
-import { WorkspaceSwitcher } from './features/workspace/WorkspaceSwitcher';
-import { ChatPane } from './features/room/components/ChatPane';
-import { NotesPane } from './features/room/components/NotesPane';
+import { ProfileSecurityModal } from './features/auth/ProfileSecurityModal';
+import { AppHeader } from './features/shell/AppHeader';
+import { AppSidebar } from './features/shell/AppSidebar';
+import { useBootDeepLinks, type PendingInviteInfo } from './features/shell/hooks/useBootDeepLinks';
+import { useCallNotifications } from './features/shell/hooks/useCallNotifications';
+import { DashboardView } from './features/workspace/DashboardView';
+import { WorkspaceModals } from './features/workspace/WorkspaceModals';
+import { RoomWorkspaceView } from './features/room/components/RoomWorkspaceView';
 import { SidebarRailTooltip } from './shared/components/SidebarRailTooltip';
 import { createRailTipStore } from './lib/railTipStore';
-import { getAvatarTone } from './lib/controlPrimitives';
 import { resetWorkspaceTransition } from './lib/delayedLoading';
 import { useDelayedLoading } from './shared/hooks/useDelayedLoading';
-import { searchKey } from './lib/selectOptions';
 import { WorkspaceLoadingScreen } from './features/workspace/WorkspaceLoadingScreen';
 import { withCurrentUserHost } from './lib/roomHostProfile';
 import { BUFFERED_LOW_THRESHOLD } from './lib/fileTransfer';
@@ -142,40 +101,19 @@ import { canComposeRoomMessage, openConnectionCount } from './lib/roomControls';
 import { useDialogFocus } from './shared/hooks/useDialogFocus';
 import {
   getSessionStatusDisplay,
-  roomInitials,
   type SessionStatus,
 } from './lib/shellState';
+import type {
+  DiscardFormKind,
+  PresencePeer,
+  Room,
+  User,
+  Workspace,
+} from './types/workspace';
 import './styles/index.css';
 
 const EMPTY_USER_IDS = new Set<string>();
 
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  emailVerified?: boolean;
-  twoFactorEnabled?: boolean;
-  createdAt: string;
-  profile?: { avatarDataUrl?: string | null; completedAt: string } | null;
-};
-type Workspace = { id: string; name: string; slug: string; role: "OWNER" | "MEMBER" };
-type Room = {
-  id: string;
-  name: string;
-  description: string | null;
-  workspaceId: string;
-  hostId: string | null;
-  access?: 'OWNER' | 'HOST' | 'MODERATOR' | 'MEMBER' | 'VIEWER' | null;
-  createdAt: string;
-  updatedAt: string;
-  host?: { id: string; name: string; email: string } | null;
-};
-type PresencePeer = {
-  peerId: string;
-  userId: string;
-  name: string;
-  email: string;
-};
 type ChatMessage = ChatMessageItem;
 type SharedNote = SharedNoteItem;
 type DataEnvelope =
@@ -343,11 +281,7 @@ function App() {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState("");
   const [twoFactorLoginCode, setTwoFactorLoginCode] = useState("");
-  const [pendingInvite, setPendingInvite] = useState<{
-    token: string;
-    workspaceName: string;
-    inviterName: string;
-  } | null>(null);
+  const [pendingInvite, setPendingInvite] = useState<PendingInviteInfo | null>(null);
   const [generatedInviteUrl, setGeneratedInviteUrl] = useState("");
   const [generatingInviteLink, setGeneratingInviteLink] = useState(false);
   const [emailVerifyCode, setEmailVerifyCode] = useState("");
@@ -361,9 +295,8 @@ function App() {
   const [notificationPermission, setNotificationPermission] = useState(() =>
     getNotificationPermissionState(),
   );
-  const notifySocketRef = useRef<Socket | null>(null);
 
-  const [discardForm,setDiscardForm] = useState<'profile'|'workspace'|'editWorkspace'|'room'|'editRoom'|'invite'|null>(null);
+  const [discardForm, setDiscardForm] = useState<DiscardFormKind>(null);
   // Profile states
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -877,145 +810,26 @@ function App() {
     hlcRef.current.setNodeId(userId || "anon");
   }, [userId]);
 
-  // Handle #invite=..., #verify_email=..., #oauth_success=1, and #oauth_error=... hashes on boot
-  useEffect(() => {
-    const rawHash = window.location.hash.replace(/^#/, "");
-    const rawSearch = window.location.search.replace(/^\?/, "");
-    const params = new URLSearchParams(rawHash.includes("=") ? rawHash : rawSearch);
+  useBootDeepLinks({
+    userId,
+    token,
+    addToast,
+    refreshAccessToken,
+    setPendingInvite,
+    setUser,
+    setWorkspaceRetry,
+    setSelectedWorkspaceId,
+    t,
+  });
 
-    const inviteToken = params.get("invite")?.trim();
-    const verifyEmailToken = params.get("verify_email")?.trim();
-    const oauthSuccess = params.get("oauth_success");
-    const oauthError = params.get("oauth_error");
-
-    if (inviteToken) {
-      sessionStorage.setItem("bifrost_pending_invite", inviteToken);
-      void fetchAppApi(apiUrl(`/invites/${encodeURIComponent(inviteToken)}`))
-        .then(async (res) => {
-          if (!res.ok) return;
-          const body = (await res.json()) as {
-            invite?: { workspaceName: string; inviterName: string };
-          };
-          if (body.invite) {
-            setPendingInvite({
-              token: inviteToken,
-              workspaceName: body.invite.workspaceName,
-              inviterName: body.invite.inviterName,
-            });
-          }
-        })
-        .catch(() => {});
-    }
-
-    if (verifyEmailToken) {
-      void fetchAppApi(apiUrl("/auth/verify-email"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: verifyEmailToken }),
-      })
-        .then(async (res) => {
-          if (!res.ok) return;
-          const body = (await res.json()) as { user?: User };
-          if (body.user) setUser(body.user);
-          addToast(t("profile.emailVerifiedToast"), "success");
-        })
-        .catch(() => {});
-    }
-
-    if (oauthSuccess === "1") {
-      localStorage.setItem("bifrost_has_session", "1");
-      void refreshAccessToken();
-    } else if (oauthError) {
-      queueMicrotask(() => addToast(t("auth.authFailed"), "error"));
-    }
-
-    if (inviteToken || verifyEmailToken || oauthSuccess || oauthError) {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, [addToast, refreshAccessToken, t]);
-
-  // Auto-accept pending 1-click workspace invite once signed in
-  useEffect(() => {
-    if (!userId || !token || isDevMockSession(token)) return;
-    const inviteToken = sessionStorage.getItem("bifrost_pending_invite");
-    if (!inviteToken) return;
-    let cancelled = false;
-    void fetchAppApi(apiUrl(`/invites/${encodeURIComponent(inviteToken)}/accept`), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(async (res) => {
-        sessionStorage.removeItem("bifrost_pending_invite");
-        if (cancelled) return;
-        setPendingInvite(null);
-        const body = (await res.json().catch(() => ({}))) as {
-          workspace?: Workspace;
-          message?: string;
-        };
-        if (!res.ok || !body.workspace) {
-          addToast(body.message || t("workspace.inviteAcceptFailed"), "error");
-          return;
-        }
-        setWorkspaceRetry((v) => v + 1);
-        setSelectedWorkspaceId(body.workspace.id);
-        addToast(t("workspace.inviteAcceptedToast", { name: body.workspace.name }), "success");
-      })
-      .catch(() => {
-        sessionStorage.removeItem("bifrost_pending_invite");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, token, addToast, t]);
-
-  // Live incoming meeting call notifications (sound + toast + browser push)
-  useEffect(() => {
-    if (!token || !userId || isDevMockSession(token)) return;
-    const notifySocket = io(SIGNALING_URL || undefined, {
-      auth: { token },
-      withCredentials: true,
-      transports: ["websocket", "polling"],
-    });
-    notifySocketRef.current = notifySocket;
-
-    notifySocket.on(
-      "workspace:room-active",
-      (payload: {
-        workspaceId: string;
-        workspaceName: string;
-        roomId: string;
-        roomName: string;
-        caller: { id: string; name: string };
-      }) => {
-        if (payload.caller.id === userId) return;
-        if (activeRoomRef.current?.id === payload.roomId) return;
-        const message = t("toasts.incomingRoomCall", {
-          caller: payload.caller.name,
-          room: payload.roomName,
-          space: payload.workspaceName,
-        });
-        playIncomingCallChime();
-        addToast(message, "info");
-        showBrowserCallNotification({
-          title: payload.roomName,
-          body: message,
-          onClick: () => {
-            setSelectedWorkspaceId(payload.workspaceId);
-          },
-        });
-      },
-    );
-
-    return () => {
-      if (notifySocketRef.current === notifySocket) {
-        notifySocketRef.current = null;
-      }
-      notifySocket.disconnect();
-    };
-  }, [token, userId, addToast, t]);
+  useCallNotifications({
+    token,
+    userId,
+    activeRoomRef,
+    setSelectedWorkspaceId,
+    addToast,
+    t,
+  });
   const userName = user?.name;
   const userEmail = user?.email;
   const memoCurrentUser = useMemo(
@@ -3236,2163 +3050,371 @@ function App() {
 
       <SidebarRailTooltip store={railTipStore} active={isCompactRail} />
 
-      {/* ===================================================================
-          1. LEFT SIDEBAR
-          =================================================================== */}
-      <aside id="app-sidebar" inert={!sidebarVisible} aria-label={t("sidebar.workspace")} className={`app-sidebar ${isSidebarOpen ? "open" : ""}`}>
-        {/* Brand Header */}
-        <div className="sidebar-header">
-          <button
-            type="button"
-            className="workspace-brand"
-            aria-label={sidebarExpanded ? t('sidebar.collapse') : t('sidebar.expand')}
-            title={sidebarExpanded ? t('sidebar.collapse') : t('sidebar.expand')}
-            aria-expanded={sidebarExpanded}
-            aria-controls="app-sidebar"
-            onClick={toggleSidebar}
-          >
-            <BifrostMark size={28} />
-            <span className="brand-title">Bifrost</span>
-          </button>
-          <button
-            type="button"
-            className="desktop-sidebar-toggle"
-            onClick={toggleSidebar}
-            aria-label={t('sidebar.collapse')}
-            title={t('sidebar.collapse')}
-            aria-controls="app-sidebar"
-            aria-expanded={sidebarExpanded}
-            aria-hidden={isCompactRail}
-            tabIndex={isCompactRail ? -1 : 0}
-          >
-            <PanelLeftClose size={17} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="btn-icon mobile-menu-btn sidebar-close-btn"
-            onClick={() => setIsSidebarOpen(false)}
-            aria-label={closeSidebarLabel}
-            title={closeSidebarLabel}
-          >
-            <X size={17} aria-hidden="true" />
-          </button>
-        </div>
+      <AppSidebar
+        user={user}
+        lang={lang}
+        theme={theme}
+        sidebarVisible={sidebarVisible}
+        isSidebarOpen={isSidebarOpen}
+        sidebarExpanded={sidebarExpanded}
+        isCompactRail={isCompactRail}
+        closeSidebarLabel={closeSidebarLabel}
+        workspaces={workspaces}
+        selectedWorkspaceId={selectedWorkspaceId}
+        selectedWorkspace={selectedWorkspace}
+        workspaceLoading={workspaceLoading}
+        workspaceLoadError={workspaceLoadError}
+        workspaceSubmitting={workspaceSubmitting}
+        breadcrumbWsText={breadcrumbWsText}
+        rooms={rooms}
+        currentRoom={currentRoom}
+        sidebarRoomsPending={sidebarRoomsPending}
+        showSidebarRoomsSkeleton={showSidebarRoomsSkeleton}
+        roomLoadError={roomLoadError}
+        roomSubmitting={roomSubmitting}
+        roomOnlineCounts={roomOnlineCounts}
+        onlinePeers={onlinePeers}
+        unassignedRoomLabel={unassignedRoomLabel}
+        t={t}
+        toggleSidebar={toggleSidebar}
+        setIsSidebarOpen={setIsSidebarOpen}
+        openEditWorkspaceModal={openEditWorkspaceModal}
+        openWorkspaceForm={openWorkspaceForm}
+        handleWorkspaceChange={handleWorkspaceChange}
+        retryWorkspaces={retryWorkspaces}
+        leaveRoom={leaveRoom}
+        openRoomForm={openRoomForm}
+        retryRooms={retryRooms}
+        joinRoom={joinRoom}
+        showRailTip={showRailTip}
+        hideRailTip={hideRailTip}
+        toggleLang={toggleLang}
+        toggleTheme={toggleTheme}
+        logout={logout}
+        openProfileModal={openProfileModal}
+      />
 
-        {/* Workspace Switcher Card */}
-        <div className="sidebar-workspace">
-          <div className="sidebar-workspace-head">
-            <span className="sidebar-section-title">{t("workspace.shortLabel")}</span>
-            <div className="sidebar-workspace-actions">
-              {selectedWorkspace?.role === "OWNER" && (
-                <button
-                  type="button"
-                  className="workspace-manage-btn"
-                  data-workspace-manage
-                  disabled={workspaceLoading || workspaceSubmitting}
-                  onClick={() => openEditWorkspaceModal(selectedWorkspace)}
-                  title={t("workspace.manageWorkspaceAria", { name: selectedWorkspace.name })}
-                  aria-label={t("workspace.manageWorkspaceAria", { name: selectedWorkspace.name })}
-                >
-                  <Settings2 size={14} aria-hidden="true" />
-                </button>
-              )}
-              <button
-                type="button"
-                className="sidebar-add-ws-btn"
-                disabled={workspaceLoading || workspaceSubmitting}
-                onClick={openWorkspaceForm}
-                title={t("sidebar.newWorkspace")}
-                aria-label={t("sidebar.newWorkspace")}
-              >
-                <FolderPlus size={16} aria-hidden="true" />
-                <span>{t("workspace.newShortButton")}</span>
-              </button>
-            </div>
-          </div>
-          <div
-            className="sidebar-workspace-picker-wrap"
-            onMouseEnter={(event) =>
-              showRailTip(
-                event.currentTarget,
-                selectedWorkspace
-                  ? `${selectedWorkspace.name} · ${selectedWorkspace.role === "OWNER" ? t("workspace.ownerBadge") : t("workspace.memberBadge")}`
-                  : breadcrumbWsText
-              )
-            }
-            onMouseLeave={hideRailTip}
-            onFocusCapture={(event) => {
-              if ((event.target as HTMLElement).classList.contains("select-menu-trigger")) {
-                showRailTip(
-                  event.currentTarget,
-                  selectedWorkspace
-                    ? `${selectedWorkspace.name} · ${selectedWorkspace.role === "OWNER" ? t("workspace.ownerBadge") : t("workspace.memberBadge")}`
-                    : breadcrumbWsText
-                );
-              } else {
-                hideRailTip();
-              }
-            }}
-            onBlurCapture={hideRailTip}
-            onClickCapture={hideRailTip}
-          >
-            <WorkspaceSwitcher
-              items={workspaces}
-              value={selectedWorkspaceId}
-              lang={lang}
-              compact={false}
-              loading={workspaceLoading}
-              error={workspaceLoadError}
-              creating={workspaceSubmitting}
-              onChange={handleWorkspaceChange}
-              onCreate={openWorkspaceForm}
-              onRetry={retryWorkspaces}
-            />
-          </div>
-        </div>
-
-        {/* Navigation & Rooms list */}
-        <nav
-          className="sidebar-nav"
-          aria-label={t("workspace.navigationAria")}
-        >
-          <ul className="sidebar-menu-list sidebar-primary-list">
-            {/* Dashboard Link */}
-            <li>
-              <button
-                type="button"
-                className={`sidebar-nav-item ${!currentRoom ? "active" : ""}`}
-                aria-current={!currentRoom ? "page" : undefined}
-                aria-label={t("sidebar.dashboard")}
-                title={t("sidebar.dashboard")}
-                onMouseEnter={(event) => showRailTip(event.currentTarget, t("sidebar.dashboard"))}
-                onMouseLeave={hideRailTip}
-                onFocus={(event) => showRailTip(event.currentTarget, t("sidebar.dashboard"))}
-                onBlur={hideRailTip}
-                onClick={() => {
-                  hideRailTip();
-                  if (currentRoom) leaveRoom();
-                  setIsSidebarOpen(false);
-                }}
-              >
-                <LayoutDashboard size={15} aria-hidden="true" />
-                <span>{t("sidebar.dashboard")}</span>
-              </button>
-            </li>
-
-          </ul>
-
-          <div className="sidebar-nav-divider" role="separator" />
-
-          <div className="sidebar-section-header">
-            <span className="sidebar-section-title">{t("sidebar.rooms")}</span>
-            {selectedWorkspace?.role === "OWNER" && (
-              <button
-                type="button"
-                className="sidebar-action-btn"
-                disabled={sidebarRoomsPending || roomSubmitting}
-                onClick={openRoomForm}
-                title={t("sidebar.newRoom")}
-                aria-label={t("sidebar.newRoom")}
-                onMouseEnter={(event) => showRailTip(event.currentTarget, t("sidebar.newRoom"))}
-                onMouseLeave={hideRailTip}
-                onFocus={(event) => showRailTip(event.currentTarget, t("sidebar.newRoom"))}
-                onBlur={hideRailTip}
-              >
-                <Video size={16} aria-hidden="true" />
-                <span className="sidebar-action-label">{t("sidebar.newRoomShortButton")}</span>
-              </button>
-            )}
-          </div>
-
-          <div className="sidebar-rooms-scroll" onScroll={hideRailTip}>
-            <ul className="sidebar-menu-list sidebar-room-list">
-              {sidebarRoomsPending ? (
-                <li
-                  className="sidebar-empty-note sidebar-rooms-pending"
-                  aria-busy="true"
-                  data-skeleton-visible={showSidebarRoomsSkeleton ? "true" : "false"}
-                >
-                  {showSidebarRoomsSkeleton && (
-                    <>
-                      <span className="sr-only" role="status">{t("room.loading")}</span>
-                      <div className="sidebar-room-skeletons" aria-hidden="true">
-                        <span className="sidebar-room-skel-row workspace-skeleton-block" />
-                        <span className="sidebar-room-skel-row workspace-skeleton-block" />
-                      </div>
-                    </>
-                  )}
-                </li>
-              ) : workspaceLoadError && !selectedWorkspace ? (
-                <li className="sidebar-empty-note">
-                  <span>{t("workspace.unavailableMessage")}</span>
-                </li>
-              ) : !selectedWorkspace ? (
-                <li className="sidebar-empty-note">
-                  {t("workspace.createToAddRooms")}
-                </li>
-              ) : roomLoadError ? (
-                <li className="sidebar-empty-note sidebar-error-note" role="alert">
-                  <span>{t("room.loadFailed")}</span>
-                  <button type="button" className="sidebar-inline-retry" onClick={retryRooms}>
-                    <RotateCcw size={12} aria-hidden="true" />
-                    <span>{t("common.retry")}</span>
-                  </button>
-                </li>
-              ) : rooms.length === 0 ? (
-                <li className="sidebar-empty-note">{t("dashboard.noRooms")}</li>
-              ) : (
-                rooms.map((room) => {
-                  const isActive = currentRoom?.id === room.id;
-                  const isUnassigned = room.access === null;
-                  const isHost = room.access === 'HOST' || (room.hostId !== null && room.hostId === user.id);
-                  const isViewer = room.access === 'VIEWER';
-                  const liveCount = isActive
-                    ? Math.max(roomOnlineCounts[room.id] ?? 0, onlinePeers.length)
-                    : (roomOnlineCounts[room.id] ?? 0);
-                  const roomLabel = isUnassigned ? `${room.name} — ${unassignedRoomLabel}` : room.name;
-                  return (
-                    <li
-                      key={room.id}
-                      className="sidebar-room-item"
-                      onMouseEnter={(event) => showRailTip(event.currentTarget, roomLabel)}
-                      onMouseLeave={hideRailTip}
-                    >
-                      <button
-                        type="button"
-                        className={`sidebar-nav-item ${isActive ? "active" : ""}`}
-                        aria-current={isActive ? "page" : undefined}
-                        aria-label={roomLabel}
-                        disabled={isUnassigned}
-                        onClick={() => {
-                          hideRailTip();
-                          joinRoom(room);
-                        }}
-                        onFocus={(event) => showRailTip(event.currentTarget, roomLabel)}
-                        onBlur={hideRailTip}
-                        title={roomLabel}
-                      >
-                        <span className="room-nav-bullet" aria-hidden="true" />
-                        <span className="room-mini-name" aria-hidden="true">{roomInitials(room.name)}</span>
-                        <span className="sidebar-room-label truncate">{room.name}</span>
-                        {isUnassigned ? (
-                          <Lock size={12} className="room-locked-icon" aria-hidden="true" />
-                        ) : liveCount > 0 ? (
-                          <span className="sidebar-room-live-pill" aria-hidden="true">
-                            <span className="sidebar-room-live-dot" />
-                            <span>{liveCount}</span>
-                          </span>
-                        ) : isHost ? (
-                          <Crown size={12} className="sidebar-room-role-icon" aria-hidden="true" />
-                        ) : isViewer ? (
-                          <Eye size={12} className="sidebar-room-role-icon" aria-hidden="true" />
-                        ) : null}
-                        {isActive && <span className="room-active-dot" aria-hidden="true" />}
-                      </button>
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-          </div>
-        </nav>
-
-        {/* Sidebar Footer: Clean profile row */}
-        <div
-          className="sidebar-footer"
-          onMouseEnter={(event) =>
-            showRailTip(
-              event.currentTarget,
-              `${user.name} · ${t("account.openMenuAria")}`
-            )
-          }
-          onMouseLeave={hideRailTip}
-          onFocusCapture={(event) => {
-            if ((event.target as HTMLElement).classList.contains("account-trigger")) {
-              showRailTip(
-                event.currentTarget,
-                `${user.name} · ${t("account.openMenuAria")}`
-              );
-            } else {
-              hideRailTip();
-            }
-          }}
-          onBlurCapture={hideRailTip}
-          onClickCapture={hideRailTip}
-        >
-          <AccountMenu
-            name={user.name}
-            email={user.email}
-            avatar={user.profile?.avatarDataUrl}
-            lang={lang}
-            theme={theme}
-            onLanguage={toggleLang}
-            onTheme={toggleTheme}
-            onLogout={logout}
-            onProfile={openProfileModal}
-          />
-        </div>
-      </aside>
-
-      {/* ===================================================================
-          2. MAIN CONTENT AREA
-          =================================================================== */}
       <div className="app-main" inert={compactLayout && isSidebarOpen}>
-        {/* Global App Header */}
-        <header className="app-header">
-          <div className="header-left">
-            <span className={`sidebar-brand-slot ${compactLayout && !sidebarVisible ? 'is-visible' : ''}`}>
-            <button
-              type="button"
-              className="sidebar-brand-toggle"
-              onClick={toggleSidebar}
-              aria-controls="app-sidebar"
-              aria-label={t("sidebar.expand")}
-              aria-expanded={sidebarVisible}
-              title={t("sidebar.expand")}
-              aria-hidden={!compactLayout || sidebarVisible}
-              tabIndex={compactLayout && !sidebarVisible ? 0 : -1}
-            >
-              <BifrostMark size={28} />
-            </button>
-            </span>
-            <nav
-              className="header-breadcrumb"
-              aria-label={t("dashboard.breadcrumbAria")}
-            >
-              {currentRoom ? (
-                <button
-                  type="button"
-                  className="breadcrumb-ws breadcrumb-link"
-                  onClick={() => leaveRoom()}
-                  title={`${selectedWorkspace?.name || t("workspace.title")} — ${t("sidebar.dashboard")}`}
-                >
-                  <ChevronLeft size={14} className="breadcrumb-back-icon" aria-hidden="true" />
-                  <span className="truncate">{selectedWorkspace?.name || t("workspace.title")}</span>
-                </button>
-              ) : (
-                <span className="breadcrumb-ws" title={breadcrumbWsText}>
-                  {breadcrumbWsText}
-                </span>
-              )}
-              <span className="breadcrumb-separator" aria-hidden="true">/</span>
-              <span
-                className="breadcrumb-room"
-                aria-current="page"
-                title={currentRoom ? currentRoom.name : t("sidebar.dashboard")}
-              >
-                {currentRoom ? currentRoom.name : t("sidebar.dashboard")}
-              </span>
-            </nav>
-          </div>
+        <AppHeader
+          user={user}
+          compactLayout={compactLayout}
+          sidebarVisible={sidebarVisible}
+          selectedWorkspace={selectedWorkspace}
+          currentRoom={currentRoom}
+          breadcrumbWsText={breadcrumbWsText}
+          statusDisplay={statusDisplay}
+          onlinePeers={onlinePeers}
+          onlineSummaryLabel={onlineSummaryLabel}
+          isRightPanelOpen={isRightPanelOpen}
+          t={t}
+          toggleSidebar={toggleSidebar}
+          leaveRoom={leaveRoom}
+          openInviteForm={openInviteForm}
+          setIsRightPanelOpen={setIsRightPanelOpen}
+        />
 
-          <div className="header-right">
-            {/* Invite Member button (Owner only, in Dashboard) */}
-            {selectedWorkspace?.role === "OWNER" && !currentRoom && (
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-header"
-                onClick={openInviteForm}
-                title={t("workspace.inviteButton")}
-              >
-                <UserPlus size={14} aria-hidden="true" />
-                <span>{t("workspace.inviteButton")}</span>
-              </button>
-            )}
-
-            {/* When in Active Room */}
-            {currentRoom && (
-              <>
-                <div className="header-room-context">
-                  {/* Realtime Session Status Pill */}
-                  <div
-                    className={`p2p-status-pill tone-${statusDisplay.tone}`}
-                    role="status"
-                    title={statusDisplay.label}
-                  >
-                    <span className="status-dot" aria-hidden="true" />
-                    <span className="truncate">{statusDisplay.label}</span>
-                  </div>
-
-                  {/* Avatar Stack */}
-                  <div
-                    className="avatar-stack"
-                    role="group"
-                    aria-label={onlineSummaryLabel}
-                    title={onlineSummaryLabel}
-                  >
-                    {onlinePeers.slice(0, 3).map((p) => (
-                      <UserAvatar
-                        key={p.peerId}
-                        name={p.userId === user.id ? user.name : p.name}
-                        src={p.userId === user.id ? user.profile?.avatarDataUrl : null}
-                        size={28}
-                        seed={p.userId}
-                        className="stacked-avatar"
-                        title={`${p.userId === user.id ? user.name : p.name} (${p.email})`}
-                      />
-                    ))}
-                    {onlinePeers.length > 3 && (
-                      <div
-                        className="stacked-avatar stacked-avatar-more"
-                        title={onlineSummaryLabel}
-                      >
-                        +{onlinePeers.length - 3}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Contextual Panel Toggle */}
-                  <button
-                    type="button"
-                    className={`btn-icon header-info-btn ${isRightPanelOpen ? "active" : ""}`}
-                    onClick={() => setIsRightPanelOpen((value) => !value)}
-                    aria-controls="room-right-panel"
-                    aria-expanded={isRightPanelOpen}
-                    title={t("rightPanel.toggle")}
-                    aria-label={t("rightPanel.toggle")}
-                  >
-                    {isRightPanelOpen ? (
-                      <PanelRightClose size={16} aria-hidden="true" />
-                    ) : (
-                      <PanelRightOpen size={16} aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
-
-                <span className="header-divider" aria-hidden="true" />
-
-                {/* Leave Room Button */}
-                <button
-                  type="button"
-                  className="btn header-leave-btn"
-                  onClick={() => leaveRoom()}
-                  title={t("room.leaveButton")}
-                >
-                  <LogOut size={14} aria-hidden="true" />
-                  <span>{t("room.leaveButton")}</span>
-                </button>
-              </>
-            )}
-          </div>
-        </header>
-
-        {/* Body Container */}
         <div className="app-content-body">
-          {/* -------------------------------------------------------------
-              VIEW A: DASHBOARD VIEW (WHEN NO ACTIVE ROOM)
-              ------------------------------------------------------------- */}
           {!currentRoom ? (
-            <main className="dashboard-view">
-              <div className="dashboard-container">
-                {routeUnavailable ? <section className="workspace-async-state" role="alert"><h1>{t('room.openErrorTitle')}</h1><p>{t('room.openErrorDesc')}</p><button type="button" className="btn btn-secondary" onClick={()=>handleWorkspaceChange(selectedWorkspaceId)}>{t('room.backToRooms')}</button></section> : workspaceLoadError ? <section className="workspace-async-state" role="alert"><h1>{t('workspace.loadFailed')}</h1><button type="button" className="btn btn-secondary" onClick={retryWorkspaces}>{t('workspace.switcherTryAgain')}</button></section> : workspaceLoading ? (
-                  <section
-                    className="workspace-loading-stage"
-                    aria-busy="true"
-                    data-skeleton-visible={showWorkspaceSkeleton ? "true" : "false"}
-                  >
-                    {showWorkspaceSkeleton && (
-                      <>
-                        <span className="sr-only" role="status">
-                          {t('dashboard.loadingWorkspaces')}
-                        </span>
-                        <div className="workspace-overview workspace-overview-skeleton" aria-hidden="true">
-                          <div className="dashboard-hero">
-                            <span className="workspace-skeleton-block hero-skeleton-greeting" />
-                            <span className="workspace-skeleton-block hero-skeleton-title" />
-                            <span className="workspace-skeleton-block hero-skeleton-subtitle" />
-                            <span className="workspace-skeleton-block hero-skeleton-facts" />
-                          </div>
-                          <div className="workspace-quick-room-slot">
-                            <div className="workspace-quick-room-skeleton">
-                              <span className="workspace-skeleton-block quick-room-skel-eyebrow" />
-                              <span className="workspace-skeleton-block quick-room-skel-title" />
-                              <span className="workspace-skeleton-block quick-room-skel-desc" />
-                              <span className="workspace-skeleton-block quick-room-skel-foot" />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="dashboard-rooms-section" aria-hidden="true">
-                          <div className="workspace-rooms-pending" data-skeleton-visible="true">
-                            {roomListSkeleton}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </section>
-                ) : <>
-                <div className="workspace-page-meta"><span>{t('dashboard.eyebrowWorkspace')}</span><span>{t('dashboard.eyebrowOverview')}</span></div>
-                <div className="workspace-overview">
-                  <div className="dashboard-hero">
-                    <p className="workspace-greeting">{t('dashboard.greeting', { name: user.name })}</p>
-                    <h1 className="hero-greeting">{selectedWorkspace?.name || t('dashboard.heroWorkspaceFallbackTitle')}</h1>
-                    <p className="hero-subtext">{t('dashboard.heroSubtitle')}</p>
-                    {selectedWorkspace && (
-                      <div className="workspace-facts">
-                        <span>
-                          {roomLoadError ? (
-                            <>
-                              <strong>—</strong>
-                              {t('dashboard.metricRoomsUnavailable')}
-                            </>
-                          ) : roomsPending ? (
-                            <>
-                              <strong>…</strong>
-                              {t('dashboard.metricRoomsLoading')}
-                            </>
-                          ) : (
-                            <>
-                              <strong>{rooms.length.toString().padStart(2, '0')}</strong>
-                              {rooms.length === 1 ? t('dashboard.roomNounOne') : t('dashboard.roomNounOther')}
-                            </>
-                          )}
-                        </span>
-                        <span>{selectedWorkspace.role === 'OWNER' ? t('workspace.ownerBadge') : t('workspace.memberBadge')}</span>
-                      </div>
-                    )}
-                  </div>
-                  {roomsPending ? (
-                    <div className="workspace-quick-room-slot" aria-hidden="true">
-                      {showRoomsSkeleton && (
-                        <div className="workspace-quick-room-skeleton">
-                          <span className="workspace-skeleton-block quick-room-skel-eyebrow" />
-                          <span className="workspace-skeleton-block quick-room-skel-title" />
-                          <span className="workspace-skeleton-block quick-room-skel-desc" />
-                          <span className="workspace-skeleton-block quick-room-skel-foot" />
-                        </div>
-                      )}
-                    </div>
-                  ) : quickRoom ? (
-                    <aside className="workspace-quick-room" aria-label={t('dashboard.quickAccessTitle')}>
-                      <div className="quick-room-top">
-                        <span>{t('dashboard.quickAccessEyebrow')}</span>
-                        <Video size={18} aria-hidden="true" />
-                      </div>
-                      <h2>{quickRoom.name}</h2>
-                      <p>{quickRoom.description || t('dashboard.quickAccessFallbackDesc')}</p>
-                      <button
-                        type="button"
-                        disabled={quickRoom.access === null}
-                        onClick={() => joinRoom(quickRoom)}
-                        aria-label={t('dashboard.enterNamedRoomAria', { name: quickRoom.name })}
-                      >
-                        <span>{t('dashboard.enterRoom')}</span>
-                        <ArrowRight size={20} aria-hidden="true" />
-                      </button>
-                      <svg className="quick-room-bridge" viewBox="0 0 300 180" fill="none" aria-hidden="true">
-                        <path d="M-20 175C70 175 50 20 150 20s80 155 170 155" />
-                        <path d="M-20 185C70 185 50 30 150 30s80 155 170 155" />
-                      </svg>
-                    </aside>
-                  ) : (
-                    <aside className={`workspace-start-note ${roomLoadError ? 'is-error' : ''}`}>
-                      <span>
-                        {roomLoadError
-                          ? t('dashboard.roomLoadErrorEyebrow')
-                          : t('dashboard.eyebrowGetStarted')}
-                      </span>
-                      {roomLoadError ? (
-                        <>
-                          <h2>{t('dashboard.roomLoadErrorMessage')}</h2>
-                          <p>{roomLoadError}</p>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={retryRooms}
-                          >
-                            <RotateCcw size={16} aria-hidden="true" />
-                            <span>{t('dashboard.retryLoadRooms')}</span>
-                          </button>
-                        </>
-                      ) : rooms.length > 0 ? (
-                        <>
-                          <h2>{t('dashboard.unassignedTitle')}</h2>
-                          <p>{t('dashboard.unassignedSubtitle')}</p>
-                        </>
-                      ) : (
-                        <>
-                          <h2>{selectedWorkspace ? t('dashboard.createFirstRoomHeading') : t('dashboard.startSharedSpaceHeading')}</h2>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            onClick={() => selectedWorkspace ? openRoomForm() : openWorkspaceForm()}
-                            disabled={!!selectedWorkspace && selectedWorkspace.role !== 'OWNER'}
-                          >
-                            <Plus size={16} aria-hidden="true" />
-                            <span>{selectedWorkspace ? t('room.createButton') : t('workspace.createButton')}</span>
-                          </button>
-                          {selectedWorkspace?.role !== 'OWNER' && selectedWorkspace && (
-                            <p>{t('dashboard.ownerWillCreateHint')}</p>
-                          )}
-                        </>
-                      )}
-                    </aside>
-                  )}
-                </div>
-
-                {!selectedWorkspace ? (
-                  <section className="workspace-onboarding" aria-label={t('dashboard.setupCardTitle')}>
-                    <div><span>01</span><h2>{t('workspace.createButton')}</h2><p>{t('dashboard.setupCardDesc')}</p></div>
-                    <div><span>02</span><h2>{t('dashboard.createRoomCardTitle')}</h2><p>{t('dashboard.createRoomCardDesc')}</p></div>
-                    <div><span>03</span><h2>{t('dashboard.inviteCardTitle')}</h2><p>{t('dashboard.inviteCardDesc')}</p></div>
-                  </section>
-                ) : (
-                  <section className="dashboard-rooms-section">
-                    <div className="rooms-section-header">
-                      <div>
-                        <span className="workspace-section-index">{t('dashboard.directoryKicker')}</span>
-                        <h2 className="rooms-section-title">{t('dashboard.directoryTitle')}</h2>
-                      </div>
-                      <div className="workspace-room-actions">
-                        <SearchField
-                          inputRef={roomSearchRef}
-                          className="workspace-room-search"
-                          value={roomSearch}
-                          onChange={setRoomSearch}
-                          placeholder={t('dashboard.searchRoomsPlaceholder')}
-                          ariaLabel={t('dashboard.searchRoomsLabel')}
-                          clearLabel={t('dashboard.clearRoomSearchAria')}
-                        />
-                        {selectedWorkspace?.role === 'OWNER' && (
-                          <button type="button" className="btn btn-outline-room" onClick={openRoomForm}>
-                            <Plus size={16} aria-hidden="true" />
-                            <span>{t('room.createButton')}</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {roomsPending ? (
-                      <div
-                        className="workspace-rooms-pending"
-                        aria-busy="true"
-                        data-skeleton-visible={showRoomsSkeleton ? "true" : "false"}
-                      >
-                        {showRoomsSkeleton && (
-                          <>
-                            <span className="sr-only" role="status">{t('room.loading')}</span>
-                            {roomListSkeleton}
-                          </>
-                        )}
-                      </div>
-                    ) : roomLoadError ? (
-                      <div className="workspace-search-empty" role="alert">
-                        <p>{roomLoadError}</p>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={retryRooms}>
-                          <RotateCcw size={13} aria-hidden="true" />
-                          <span>{t('dashboard.retryLoadRooms')}</span>
-                        </button>
-                      </div>
-                    ) : rooms.length === 0 ? (
-                      <div className="workspace-rooms-empty">
-                        <Video size={32} aria-hidden="true" />
-                        <h3>{t('dashboard.noRoomsTitle')}</h3>
-                        <p>
-                          {selectedWorkspace?.role === 'OWNER'
-                            ? t('dashboard.noRoomsOwnerDesc')
-                            : t('dashboard.noRoomsMemberDesc')}
-                        </p>
-                        {selectedWorkspace?.role === 'OWNER' && (
-                          <button type="button" className="btn btn-primary" onClick={openRoomForm}>
-                            <Plus size={16} aria-hidden="true" />
-                            <span>{t('room.createButton')}</span>
-                          </button>
-                        )}
-                      </div>
-                    ) : (() => {
-                      const normalizedRoomQuery = searchKey(roomSearch);
-                      const filteredRooms = normalizedRoomQuery
-                        ? rooms.filter((room) =>
-                            searchKey(`${room.name} ${room.description ?? ''} ${room.host?.name ?? ''}`).includes(normalizedRoomQuery)
-                          )
-                        : rooms;
-                      return (
-                        <div className="workspace-room-list">
-                          <div className="workspace-room-list-head" aria-hidden="true">
-                            <span>{t('dashboard.roomsSummaryHeading')}</span>
-                            <span>{t('dashboard.hostColumnHeading')}</span>
-                            <span>↗</span>
-                          </div>
-                          {filteredRooms.map((room, index) => {
-                            const isHost = room.access === 'HOST' || (room.hostId !== null && room.hostId === user.id);
-                            const isModerator = room.access === 'MODERATOR';
-                            const isViewer = room.access === 'VIEWER';
-                            const isUnassigned = room.access === null;
-                            return (
-                            <article key={room.id} className="workspace-room-row">
-                              <span className="workspace-room-number">{(index + 1).toString().padStart(2, '0')}</span>
-                              <div className="workspace-room-info">
-                                <h3>{room.name}</h3>
-                                {isUnassigned ? (
-                                  <span className="room-access-hint tone-unassigned">
-                                    {t('sidebar.notAssignedBadge')}
-                                  </span>
-                                ) : isViewer ? (
-                                  <span className="room-access-hint tone-viewer">
-                                    <Eye size={12} aria-hidden="true" />
-                                    <span>{t('members.roleViewerBadge')}</span>
-                                  </span>
-                                ) : isHost ? (
-                                  <span className="room-access-hint tone-host">
-                                    <Crown size={12} aria-hidden="true" />
-                                    <span>{t('members.roleHostBadge')}</span>
-                                  </span>
-                                ) : isModerator ? (
-                                  <span className="room-access-hint tone-moderator">
-                                    <ShieldCheck size={12} aria-hidden="true" />
-                                    <span>{t('members.roleCoordinatorBadge')}</span>
-                                  </span>
-                                ) : null}
-                                <p>{room.description || t('dashboard.roomFallbackDesc')}</p>
-                              </div>
-                              <div className="workspace-room-host">
-                                {room.host ? (
-                                  <UserAvatar
-                                    name={room.host.name}
-                                    src={room.host.id === user.id ? user.profile?.avatarDataUrl : null}
-                                    size={27}
-                                    seed={room.host.id}
-                                    className="workspace-room-host-avatar"
-                                    decorative
-                                  />
-                                ) : (
-                                  <span className="workspace-room-host-empty" aria-hidden="true">—</span>
-                                )}
-                                <small>{room.host?.name || t('dashboard.unassignedLabel')}</small>
-                              </div>
-                              <div className="workspace-room-row-actions">
-                                {(selectedWorkspace?.role === 'OWNER' || isHost) && (
-                                  <button
-                                    type="button"
-                                    className="btn-icon room-manage-btn"
-                                    data-room-manage={room.id}
-                                    aria-label={t('dashboard.manageNamedRoomAria', { name: room.name })}
-                                    title={t('dashboard.manageNamedRoomAria', { name: room.name })}
-                                    onClick={() => {
-                                      lastManagedRoomIdRef.current = room.id;
-                                      openEditRoomModal(room);
-                                    }}
-                                  >
-                                    <Settings2 size={15} aria-hidden="true" />
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className="room-enter-btn"
-                                  disabled={room.access === null}
-                                  title={room.access === null ? t("sidebar.notAssignedBadge") : undefined}
-                                  onClick={() => joinRoom(room)}
-                                  aria-label={t('dashboard.enterNamedRoomAria', { name: room.name })}
-                                >
-                                  <span>{t('dashboard.enterRoom')}</span>
-                                  <ArrowRight size={20} aria-hidden="true" />
-                                </button>
-                              </div>
-                            </article>
-                          )})}
-                          {normalizedRoomQuery && filteredRooms.length === 0 && (
-                            <div className="workspace-search-empty" role="status">
-                              <p>{t('dashboard.noMatchingRooms')}</p>
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => {
-                                  setRoomSearch('');
-                                  requestAnimationFrame(() => roomSearchRef.current?.focus());
-                                }}
-                              >
-                                {t('dashboard.clearFilter')}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                    <div className="workspace-bottom-note">
-                      <span>WebRTC · P2P</span>
-                      <span>{t('room.protocolTagline')}</span>
-                    </div>
-                  </section>
-                )}
-                {selectedWorkspace && (
-                  <WorkspaceMembers
-                    key={`${user.id}:${selectedWorkspace.id}:${membersVersion}`}
-                    workspaceId={selectedWorkspace.id}
-                    token={token}
-                    userId={user.id}
-                    currentUser={memberCurrentUser}
-                    owner={selectedWorkspace.role === 'OWNER'}
-                    lang={lang}
-                    refresh={membersVersion}
-                    rooms={rooms}
-                    roomsLoading={roomsPending}
-                    roomLoadError={roomLoadError}
-                    liveRoomUserIds={EMPTY_USER_IDS}
-                    onUpdated={retryRooms}
-                    onInvite={openInviteForm}
-                    onToast={addToast}
-                  />
-                )}
-                </>}
-              </div>
-            </main>
+            <DashboardView
+              user={user}
+              token={token}
+              lang={lang}
+              selectedWorkspace={selectedWorkspace}
+              selectedWorkspaceId={selectedWorkspaceId}
+              rooms={rooms}
+              quickRoom={quickRoom}
+              roomsPending={roomsPending}
+              showRoomsSkeleton={showRoomsSkeleton}
+              roomLoadError={roomLoadError}
+              roomSearch={roomSearch}
+              roomSearchRef={roomSearchRef}
+              lastManagedRoomIdRef={lastManagedRoomIdRef}
+              routeUnavailable={routeUnavailable}
+              workspaceLoadError={workspaceLoadError}
+              workspaceLoading={workspaceLoading}
+              showWorkspaceSkeleton={showWorkspaceSkeleton}
+              roomListSkeleton={roomListSkeleton}
+              membersVersion={membersVersion}
+              memberCurrentUser={memberCurrentUser}
+              t={t}
+              handleWorkspaceChange={handleWorkspaceChange}
+              retryWorkspaces={retryWorkspaces}
+              retryRooms={retryRooms}
+              joinRoom={joinRoom}
+              openRoomForm={openRoomForm}
+              openWorkspaceForm={openWorkspaceForm}
+              openEditRoomModal={openEditRoomModal}
+              setRoomSearch={setRoomSearch}
+              openInviteForm={openInviteForm}
+              addToast={addToast}
+            />
           ) : (
-            /* -------------------------------------------------------------
-               VIEW B: ACTIVE ROOM SCREEN (TAB NAVIGATION & SPLIT LAYOUT)
-               ------------------------------------------------------------- */
-            <div className="room-screen">
-              {roomReadOnly && <p className="room-readonly-notice" role="status">{t('room.readOnlyModeBanner')}</p>}
-              <div className="room-session-heading">
-                <div className="room-session-title-group">
-                  <div className="room-editorial-kicker">
-                    <span className="workspace-section-index">{t('room.eyebrow')}</span>
-                    <span className="room-kicker-divider" aria-hidden="true">·</span>
-                    <span className="room-kicker-coord" aria-hidden="true">B / 001</span>
-                    <span className="room-kicker-motif" lang="ja" aria-hidden="true">折り目の向こうで、出会う。</span>
-                  </div>
-                  <h1>{currentRoom.name}</h1>
-                  {currentRoom.description && (
-                    <p className="room-session-subtitle">{currentRoom.description}</p>
-                  )}
-                </div>
-                <div className="room-session-meta">
-                  <span className={`p2p-status-pill room-mobile-status tone-${statusDisplay.tone}`}>
-                    <span className="status-dot" aria-hidden="true" />
-                    <span>{statusDisplay.label}</span>
-                  </span>
-                  <span className="room-presence-count">
-                    <Users size={14} aria-hidden="true" />
-                    <span>{t('room.peersInRoomCount', { count: onlinePeers.length })}</span>
-                  </span>
-                </div>
-              </div>
-              {roomError && <div className="form-error" style={{ margin: "12px 16px 0" }}>{roomError}</div>}
-              {/* Room Navigation Tabs */}
-              <div
-                ref={roomTabsRef}
-                className="room-tabs-nav"
-                role="tablist"
-                aria-orientation="horizontal"
-                aria-label={t('room.sectionsNavAria')}
-              >
-                {[
-                  { id: "meeting" as const, icon: <Video size={16} />, label: t("tabs.meeting") },
-                  { id: "board" as const, icon: <Columns3 size={15} />, label: t("tabs.meetingBoard") },
-                  {
-                    id: "chat" as const,
-                    icon: <MessageSquare size={16} />,
-                    label: t("tabs.chat"),
-                    badge: messages.length > 0 ? <span className="tag-status">({messages.length})</span> : null,
-                  },
-                  { id: "notes" as const, icon: <FileText size={16} />, label: t("tabs.notes") },
-                  { id: "files" as const, icon: <FolderUp size={16} />, label: t("tabs.files") },
-                ].map((tabItem) => {
-                  const selected = activeTab === tabItem.id;
-                  return (
-                    <button
-                      key={tabItem.id}
-                      ref={(el) => { roomTabButtonRefs.current[tabItem.id] = el; }}
-                      type="button"
-                      role="tab"
-                      id={roomTabElementId(tabItem.id)}
-                      aria-selected={selected}
-                      aria-controls={roomPanelElementId(tabItem.id)}
-                      tabIndex={roomTabTabIndex(tabItem.id, activeTab)}
-                      className={`room-tab-btn ${selected ? "active" : ""}`}
-                      onClick={() => selectTab(tabItem.id)}
-                      onKeyDown={(event) => handleRoomTabKeyDown(tabItem.id, event)}
-                    >
-                      {tabItem.icon}
-                      <span>{tabItem.label}</span>
-                      {tabItem.badge}
-                    </button>
-                  );
-                })}
-                <span className="room-tab-indicator" aria-hidden="true" />
-              </div>
-
-              {/* Room Split Body: Tabs Viewport + Right Contextual Panel */}
-              <div className="room-content-split">
-                {/* Tabs Viewport (All 5 panes permanently mounted for zero state loss) */}
-                <div className="room-tabs-viewport" inert={compactLayout && isRightPanelOpen}>
-                  {/* PANE 1: MEETING */}
-                  <div {...roomTabPanelProps("meeting")}>
-                    <MeetingTab
-                      readOnly={roomReadOnly}
-                      currentUserId={user.id}
-                      currentUserName={user.name}
-                      currentUserAvatar={user.profile?.avatarDataUrl}
-                      roomName={currentRoom.name}
-                      onlinePeers={onlinePeers}
-                      micEnabled={micEnabled}
-                      camEnabled={camEnabled}
-                      screenSharing={screenSharing}
-                      noiseSuppression={noiseSuppression}
-                      backgroundBlur={backgroundBlur}
-                      mediaError={mediaError}
-                      localAudioStream={localAudioStream}
-                      localVideoStream={localVideoStream}
-                      remoteStreams={remoteStreams}
-                      peerStats={peerStats}
-                      meshProfile={meshProfile}
-                      audioInputs={audioInputs}
-                      videoInputs={videoInputs}
-                      audioOutputs={audioOutputs}
-                      selectedMicId={selectedMicId}
-                      selectedCamId={selectedCamId}
-                      selectedSpeakerId={selectedSpeakerId}
-                      speakerSelectionSupported={speakerSelectionSupported}
-                      onToggleMic={() => void toggleMic()}
-                      onToggleCam={() => void toggleCam()}
-                      onToggleScreenShare={() => void toggleScreenShare()}
-                      onToggleNoiseSuppression={() => void toggleNoiseSuppression()}
-                      onToggleBackgroundBlur={() => void toggleBackgroundBlur()}
-                      onSelectMicrophone={(deviceId) => void selectMicrophone(deviceId)}
-                      onSelectCamera={(deviceId) => void selectCamera(deviceId)}
-                      onSelectSpeaker={selectSpeaker}
-                      onLeaveRoom={leaveRoom}
-                      onCopyRoomId={handleCopyCurrentRoomId}
-                      copiedRoomId={copiedRoomId}
-                      onInvite={selectedWorkspace?.role === 'OWNER' ? openInviteForm : undefined}
-                      t={t}
-                    />
-                  </div>
-
-                    {/* PANE 2: MEETING BOARD */}
-                    <div {...roomTabPanelProps("board")}>
-                      <MeetingBoard readOnly={roomReadOnly}
-                        key={`${user.id}:${currentRoom.workspaceId}:${currentRoom.id}`}
-                        currentUser={memoCurrentUser ?? { id: user.id, name: user.name, email: user.email }}
-                        workspaceId={currentRoom.workspaceId}
-                        roomId={currentRoom.id}
-                        broadcast={broadcast}
-                        sendDirectToPeer={sendDirectToBoardPeer}
-                        registerMessageHandler={registerMeetingBoardMessageHandler}
-                        registerPeerConnectHandler={registerMeetingBoardPeerConnectHandler}
-                        cloudBoard={cloudBoard}
-                        onBoardStateChange={handleBoardStateChange}
-                        lang={lang}
-                        addToast={addToast}
-                      />
-                    </div>
-
-                    {/* PANE 3: CHAT */}
-                    <div {...roomTabPanelProps("chat")} tabIndex={roomReadOnly ? 0 : undefined}>
-                      <ChatPane
-                        scopeKey={roomDraftKey(user.id, currentRoom.workspaceId, currentRoom.id)}
-                        roomName={currentRoom.name}
-                        roomReadOnly={roomReadOnly}
-                        peersCount={peersCount}
-                        currentUserId={user.id}
-                        messages={messages}
-                        mentionableMembers={onlinePeers.map((peer) => ({ userId: peer.userId, name: peer.name }))}
-                        chatError={chatError}
-                        messagesHeading={t('chat.messagesHeading')}
-                        noRecipientsLabel={t('chat.noRecipients')}
-                        chatLogRef={chatLogRef}
-                        onChatScroll={handleChatScroll}
-                        lang={lang}
-                        t={t}
-                        onSendMessage={sendMessage}
-                        onToggleReaction={toggleChatReaction}
-                        onTogglePin={toggleChatPin}
-                      />
-                    </div>
-
-                    {/* PANE 4: NOTES */}
-                    <div {...roomTabPanelProps("notes")}>
-                      <NotesPane
-                        scopeKey={roomDraftKey(user.id, currentRoom.workspaceId, currentRoom.id)}
-                        roomName={currentRoom.name}
-                        roomReadOnly={roomReadOnly}
-                        noteShared={noteShared}
-                        noteShareStatus={noteShareStatus}
-                        peersCount={peersCount}
-                        noteError={noteError}
-                        sharedNotes={sharedNotes}
-                        hydratedNote={hydratedNote}
-                        lang={lang}
-                        t={t}
-                        onToggleNoteSharing={toggleNoteSharing}
-                        onRetryNoteSync={retryNoteSync}
-                        onNoteContentChange={handleNoteContentChange}
-                        onSuccessToast={handleSuccessToast}
-                        onErrorToast={handleErrorToast}
-                      />
-                    </div>
-
-                    {/* PANE 5: FILES */}
-                    <div {...roomTabPanelProps("files")} ref={filesPanelRef}>
-                      <FileShare readOnly={roomReadOnly}
-                        key={currentRoom.id}
-                        roomId={currentRoom.id}
-                        peersCount={peersCount}
-                        onlinePeerIds={onlinePeerIds}
-                        channelsRef={channelsRef}
-                        broadcast={broadcast}
-                        sendDirect={sendDirectToFilePeer}
-                        sendBinaryDirect={sendBinaryToFilePeer}
-                        registerMessageHandler={registerFileMessageHandler}
-                        registerBinaryHandler={registerFileBinaryHandler}
-                        onSuccessToast={handleSuccessToast}
-                        onErrorToast={handleErrorToast}
-                        t={t}
-                      />
-                    </div>
-                </div>
-
-                <MotionPresence present={isRightPanelOpen}>
-                {compactLayout && (
-                  <div
-                    className="panel-backdrop"
-                    aria-hidden="true"
-                    onClick={() => setIsRightPanelOpen(false)}
-                  />
-                )}
-
-                {/* Right Contextual Panel (Collapsible) */}
-                  <aside
-                    id="room-right-panel"
-                    className="right-panel open"
-                    aria-label={t("rightPanel.title")}
-                  >
-                    <div className="right-panel-header">
-                      <div className="right-panel-title-group">
-                        <span className="right-panel-coord" aria-hidden="true">B / 001</span>
-                        <h3>{t("rightPanel.title")}</h3>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn-icon right-panel-close-btn"
-                        onClick={() => setIsRightPanelOpen(false)}
-                        aria-label={t("common.close")}
-                        title={t("common.close")}
-                      >
-                        <PanelRightClose size={16} aria-hidden="true" />
-                      </button>
-                    </div>
-
-                    <div className="right-panel-body">
-                      {/* Room info section */}
-                      <div className="right-panel-section">
-                        <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">01 /</span>{t("rightPanel.roomDetails")}</p>
-                        <div className="right-panel-info-row">
-                          <span>{t("rightPanel.host")}:</span>
-                          <strong>{withCurrentUserHost(currentRoom, user).host?.name || t('dashboard.unassignedLabel')}</strong>
-                        </div>
-                        <div className="right-panel-info-row">
-                          <span>{t("rightPanel.created")}:</span>
-                          <span>{new Date(currentRoom.createdAt).toLocaleDateString(LOCALE_META[lang].intl)}</span>
-                        </div>
-                        {currentRoom.description && (
-                          <p className="room-card-desc">{currentRoom.description}</p>
-                        )}
-                        <button
-                          type="button"
-                          className="copy-id-button"
-                          onClick={handleCopyCurrentRoomId}
-                        >
-                          {copiedRoomId ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-                          <span>{copiedRoomId ? t("rightPanel.copied") : t("rightPanel.copyRoomId")}</span>
-                        </button>
-                        {(selectedWorkspace?.role === "OWNER" ||
-                            currentRoom.access === "HOST" ||
-                            (currentRoom.hostId !== null && currentRoom.hostId === user.id)) && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm edit-room-panel-btn"
-                              onClick={() => openEditRoomModal(currentRoom)}
-                            >
-                              <Settings2 size={14} aria-hidden="true" />
-                              <span>{t("room.editRoomButton")}</span>
-                            </button>
-                          )}
-                      </div>
-
-                      {/* Online Members section */}
-                      <div className="right-panel-section">
-                        <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">02 /</span>{t("rightPanel.onlineMembers", { count: onlinePeers.length })}</p>
-                        <p className="right-panel-presence-scope">
-                          {isDevMockSession(token)
-                            ? t("rightPanel.localPreviewBadge")
-                            : t("rightPanel.verifiedPeersHint")}
-                        </p>
-                        {onlinePeers.length === 0 ? (
-                          <p className="peer-empty-note" role="status">
-                            {t("rightPanel.waitingPeersHint")}
-                          </p>
-                        ) : (
-                          <div className="peer-list">
-                            {onlinePeers.map((peer) => (
-                              <div className="peer-row" key={peer.peerId}>
-                                <UserAvatar
-                                  name={peer.userId === user.id ? user.name : peer.name}
-                                  src={peer.userId === user.id ? user.profile?.avatarDataUrl : null}
-                                  size={32}
-                                  seed={peer.userId}
-                                  className="peer-avatar"
-                                />
-                                <div className="peer-info">
-                                  <span className="peer-name">
-                                    {peer.userId === user.id ? user.name : peer.name} {peer.userId === user.id ? `(${t("meeting.you")})` : ""}
-                                  </span>
-                                  <span className="peer-email">{peer.email}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {selectedWorkspace && (
-                        <div className="right-panel-section">
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm right-panel-directory-btn"
-                            onClick={() => {
-                              setIsRightPanelOpen(false);
-                              setShowRoomMembersModal(true);
-                            }}
-                          >
-                            <Users size={14} aria-hidden="true" />
-                            <span>{t("members.viewWorkspaceMembers")}</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Connection Diagnostics */}
-                      <div className="right-panel-section">
-                        <p className="eyebrow"><span className="eyebrow-num" aria-hidden="true">03 /</span>{t("rightPanel.connection")}</p>
-                        <div
-                          className={`p2p-status-pill tone-${
-                            peersCount > 0
-                              ? "connected"
-                              : sessionStatus.kind === "error"
-                                ? "error"
-                                : sessionStatus.kind === "localPreview"
-                                  ? "neutral"
-                                  : "pending"
-                          }`}
-                        >
-                          <span className="status-dot" aria-hidden="true" />
-                          <span>
-                            {peersCount > 0
-                              ? t("rightPanel.p2pActive")
-                              : sessionStatus.kind === "error"
-                                ? statusDisplay.label
-                                : sessionStatus.kind === "localPreview"
-                                  ? t("rightPanel.localPreviewSignalingHint")
-                                  : t("rightPanel.noPeerConnection")}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </aside>
-                </MotionPresence>
-              </div>
-            </div>
+            <RoomWorkspaceView
+              user={user}
+              token={token}
+              lang={lang}
+              currentRoom={currentRoom}
+              selectedWorkspace={selectedWorkspace}
+              roomReadOnly={roomReadOnly}
+              roomError={roomError}
+              statusDisplay={statusDisplay}
+              sessionStatus={sessionStatus}
+              onlinePeers={onlinePeers}
+              peersCount={peersCount}
+              activeTab={activeTab}
+              roomTabsRef={roomTabsRef}
+              roomTabButtonRefs={roomTabButtonRefs}
+              filesPanelRef={filesPanelRef}
+              compactLayout={compactLayout}
+              isRightPanelOpen={isRightPanelOpen}
+              copiedRoomId={copiedRoomId}
+              messagesCount={messages.length}
+              meetingProps={{
+                readOnly: roomReadOnly,
+                currentUserId: user.id,
+                currentUserName: user.name,
+                currentUserAvatar: user.profile?.avatarDataUrl,
+                roomName: currentRoom.name,
+                onlinePeers,
+                micEnabled,
+                camEnabled,
+                screenSharing,
+                noiseSuppression,
+                backgroundBlur,
+                mediaError,
+                localAudioStream,
+                localVideoStream,
+                remoteStreams,
+                peerStats,
+                meshProfile,
+                audioInputs,
+                videoInputs,
+                audioOutputs,
+                selectedMicId,
+                selectedCamId,
+                selectedSpeakerId,
+                speakerSelectionSupported,
+                onToggleMic: () => void toggleMic(),
+                onToggleCam: () => void toggleCam(),
+                onToggleScreenShare: () => void toggleScreenShare(),
+                onToggleNoiseSuppression: () => void toggleNoiseSuppression(),
+                onToggleBackgroundBlur: () => void toggleBackgroundBlur(),
+                onSelectMicrophone: (deviceId) => void selectMicrophone(deviceId),
+                onSelectCamera: (deviceId) => void selectCamera(deviceId),
+                onSelectSpeaker: selectSpeaker,
+                onLeaveRoom: leaveRoom,
+                onCopyRoomId: handleCopyCurrentRoomId,
+                copiedRoomId,
+                onInvite: selectedWorkspace?.role === 'OWNER' ? openInviteForm : undefined,
+                t,
+              }}
+              boardProps={{
+                readOnly: roomReadOnly,
+                currentUser: memoCurrentUser ?? { id: user.id, name: user.name, email: user.email },
+                workspaceId: currentRoom.workspaceId,
+                roomId: currentRoom.id,
+                broadcast,
+                sendDirectToPeer: sendDirectToBoardPeer,
+                registerMessageHandler: registerMeetingBoardMessageHandler,
+                registerPeerConnectHandler: registerMeetingBoardPeerConnectHandler,
+                cloudBoard,
+                onBoardStateChange: handleBoardStateChange,
+                lang,
+                addToast,
+              }}
+              chatProps={{
+                scopeKey: roomDraftKey(user.id, currentRoom.workspaceId, currentRoom.id),
+                roomName: currentRoom.name,
+                roomReadOnly,
+                peersCount,
+                currentUserId: user.id,
+                messages,
+                mentionableMembers: onlinePeers.map((peer) => ({ userId: peer.userId, name: peer.name })),
+                chatError,
+                messagesHeading: t('chat.messagesHeading'),
+                noRecipientsLabel: t('chat.noRecipients'),
+                chatLogRef,
+                onChatScroll: handleChatScroll,
+                lang,
+                t,
+                onSendMessage: sendMessage,
+                onToggleReaction: toggleChatReaction,
+                onTogglePin: toggleChatPin,
+              }}
+              notesProps={{
+                scopeKey: roomDraftKey(user.id, currentRoom.workspaceId, currentRoom.id),
+                roomName: currentRoom.name,
+                roomReadOnly,
+                noteShared,
+                noteShareStatus,
+                peersCount,
+                noteError,
+                sharedNotes,
+                hydratedNote,
+                lang,
+                t,
+                onToggleNoteSharing: toggleNoteSharing,
+                onRetryNoteSync: retryNoteSync,
+                onNoteContentChange: handleNoteContentChange,
+                onSuccessToast: handleSuccessToast,
+                onErrorToast: handleErrorToast,
+              }}
+              fileShareProps={{
+                readOnly: roomReadOnly,
+                roomId: currentRoom.id,
+                peersCount,
+                onlinePeerIds,
+                channelsRef,
+                broadcast,
+                sendDirect: sendDirectToFilePeer,
+                sendBinaryDirect: sendBinaryToFilePeer,
+                registerMessageHandler: registerFileMessageHandler,
+                registerBinaryHandler: registerFileBinaryHandler,
+                onSuccessToast: handleSuccessToast,
+                onErrorToast: handleErrorToast,
+                t,
+              }}
+              t={t}
+              selectTab={selectTab}
+              handleRoomTabKeyDown={handleRoomTabKeyDown}
+              roomTabPanelProps={roomTabPanelProps}
+              setIsRightPanelOpen={setIsRightPanelOpen}
+              handleCopyCurrentRoomId={handleCopyCurrentRoomId}
+              openEditRoomModal={openEditRoomModal}
+              setShowRoomMembersModal={setShowRoomMembersModal}
+            />
           )}
         </div>
       </div>
 
-      {/* ===================================================================
-          MODALS: PROFILE, CREATE WORKSPACE, CREATE ROOM
-          =================================================================== */}
+      <ProfileSecurityModal
+        user={user}
+        token={token}
+        lang={lang}
+        showProfileModal={showProfileModal}
+        discardForm={discardForm}
+        profileAvatar={profileAvatar}
+        profileName={profileName}
+        profileMessage={profileMessage}
+        profileSaving={profileSaving}
+        profileImageBusy={profileImageBusy}
+        currentPasswordInput={currentPasswordInput}
+        newPasswordInput={newPasswordInput}
+        confirmNewPasswordInput={confirmNewPasswordInput}
+        passwordSaving={passwordSaving}
+        passwordError={passwordError}
+        emailVerifyCode={emailVerifyCode}
+        emailVerifyDevCode={emailVerifyDevCode}
+        emailVerifyBusy={emailVerifyBusy}
+        twoFactorSetupSecret={twoFactorSetupSecret}
+        twoFactorSetupCode={twoFactorSetupCode}
+        twoFactorRecoveryCodes={twoFactorRecoveryCodes}
+        twoFactorBusy={twoFactorBusy}
+        twoFactorError={twoFactorError}
+        notificationPermission={notificationPermission}
+        t={t}
+        closeProfileForm={closeProfileForm}
+        updateProfile={updateProfile}
+        setProfileAvatar={setProfileAvatar}
+        setProfileImageBusy={setProfileImageBusy}
+        setProfileName={setProfileName}
+        setProfileMessage={setProfileMessage}
+        submitChangePassword={submitChangePassword}
+        setCurrentPasswordInput={setCurrentPasswordInput}
+        setNewPasswordInput={setNewPasswordInput}
+        setConfirmNewPasswordInput={setConfirmNewPasswordInput}
+        handleSendEmailVerification={handleSendEmailVerification}
+        handleVerifyEmailCode={handleVerifyEmailCode}
+        setEmailVerifyCode={setEmailVerifyCode}
+        handleSetupTwoFactor={handleSetupTwoFactor}
+        handleEnableTwoFactor={handleEnableTwoFactor}
+        handleDisableTwoFactor={handleDisableTwoFactor}
+        setTwoFactorSetupCode={setTwoFactorSetupCode}
+        setNotificationPermission={setNotificationPermission}
+      />
 
-      <MotionPresence present={!!discardForm}>
-        <ConfirmDialog
-          title={
-            discardForm === 'profile'
-              ? t('dashboard.discardProfileTitle')
-              : discardForm === 'workspace'
-                ? t('dashboard.discardWorkspaceTitle')
-                : discardForm === 'editWorkspace'
-                  ? t('dashboard.discardEditWorkspaceTitle')
-                  : discardForm === 'room'
-                    ? t('dashboard.discardRoomTitle')
-                    : discardForm === 'editRoom'
-                      ? t('dashboard.discardEditRoomTitle')
-                      : t('dashboard.discardInviteTitle')
-          }
-          description={
-            discardForm === 'profile'
-              ? isDevMockSession(token)
-                ? t('dashboard.discardProfileAvatarBody')
-                : t('dashboard.discardProfileNameBody')
-              : discardForm === 'workspace'
-                ? t('dashboard.discardWorkspaceBody')
-                : discardForm === 'editWorkspace'
-                  ? t('dashboard.discardEditWorkspaceBody')
-                  : discardForm === 'room'
-                    ? t('dashboard.discardRoomBody')
-                    : discardForm === 'editRoom'
-                      ? t('dashboard.discardEditRoomBody')
-                      : t('dashboard.discardInviteBody')
-          }
-          cancelLabel={t('common.keepEditing')}
-          confirmLabel={t('common.discard')}
-          tone="danger"
-          onCancel={() => setDiscardForm(null)}
-          onConfirm={() => {
-            if (discardForm === 'profile') setShowProfileModal(false);
-            if (discardForm === 'workspace') { setShowCreateWsModal(false); setWorkspaceName(''); }
-            if (discardForm === 'editWorkspace') { setEditingWorkspace(null); setEditWorkspaceError(''); restoreWorkspaceManageFocus(); }
-            if (discardForm === 'room') { setShowCreateRoomModal(false); setNewRoomName(''); setNewRoomDesc(''); }
-            if (discardForm === 'editRoom') { setEditingRoom(null); setEditRoomError(''); restoreManagedRoomFocus(); }
-            if (discardForm === 'invite') { setShowInviteModal(false); setInviteEmail(''); }
-            setDiscardForm(null);
-          }}
-        />
-      </MotionPresence>
-      <MotionPresence present={!!editingWorkspace && confirmDeleteWorkspace}>
-        {editingWorkspace && (
-          <ConfirmDialog
-            title={t("workspace.deleteConfirmTitle")}
-            description={t("workspace.deleteConfirmBody", { name: editingWorkspace.name })}
-            cancelLabel={t("common.cancel")}
-            confirmLabel={t("workspace.deleteConfirmAction")}
-            tone="danger"
-            onCancel={() => setConfirmDeleteWorkspace(false)}
-            onConfirm={() => void executeDeleteWorkspace()}
-          />
-        )}
-      </MotionPresence>
-      <MotionPresence present={!!editingRoom && confirmDeleteRoom}>
-        {editingRoom && (
-          <ConfirmDialog
-            title={t("room.deleteConfirmTitle")}
-            description={t("room.deleteConfirmBody", { name: editingRoom.name })}
-            cancelLabel={t("common.cancel")}
-            confirmLabel={t("room.deleteConfirmAction")}
-            tone="danger"
-            onCancel={() => setConfirmDeleteRoom(false)}
-            onConfirm={() => void executeDeleteRoom()}
-          />
-        )}
-      </MotionPresence>
-      {/* Profile Modal */}
-      <MotionPresence present={showProfileModal && !discardForm}>
-        <div className="modal-overlay" onClick={closeProfileForm}>
-          <section
-            className="modal-card profile-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-profile-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3 id="modal-profile-title">{t("profile.modalTitle")}</h3>
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={closeProfileForm}
-                disabled={profileSaving || profileImageBusy}
-                aria-label={t("common.close")}
-                title={t("common.close")}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </div>
-            <form onSubmit={updateProfile} className="form-stack" aria-busy={profileSaving || undefined}>
-              <AvatarPicker
-                key={`${user.id}:${showProfileModal}:${isDevMockSession(token)}`}
-                value={profileAvatar}
-                name={profileName}
-                color={getAvatarTone(user.id)}
-                lang={lang}
-                disabled={profileSaving}
-                onChange={setProfileAvatar}
-                onBusy={setProfileImageBusy}
-              />
-              <div className="form-field">
-                <label htmlFor="modal-profile-name" className="form-field-label">
-                  <span>{t("profile.displayName")}</span>
-                  <span className="form-required-mark" aria-hidden="true">*</span>
-                </label>
-                <input
-                  id="modal-profile-name"
-                  autoComplete="name"
-                  required
-                  minLength={2}
-                  maxLength={100}
-                  disabled={profileSaving}
-                  className="input-text"
-                  value={profileName}
-                  onChange={(event) => {
-                    setProfileName(event.target.value);
-                    if (profileMessage) setProfileMessage("");
-                  }}
-                  aria-invalid={Boolean(profileMessage) || undefined}
-                  aria-describedby={profileMessage ? "modal-profile-error" : "modal-profile-hint"}
-                />
-                <p id="modal-profile-hint" className="form-field-hint">
-                  {t("profile.displayNameHint")}
-                </p>
-              </div>
-              {profileMessage && (
-                <p id="modal-profile-error" className="form-error" role="alert">
-                  {profileMessage}
-                </p>
-              )}
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={closeProfileForm}
-                  disabled={profileSaving || profileImageBusy}
-                >
-                  {t("common.close")}
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={profileSaving || profileImageBusy}
-                  aria-busy={profileSaving || undefined}
-                >
-                  {profileSaving && <span className="btn-spinner" aria-hidden="true" />}
-                  <span>
-                    {profileSaving ? t("common.saving") : t("profile.saveButton")}
-                  </span>
-                </button>
-              </div>
-            </form>
-            {!isDevMockSession(token) && (
-              <form onSubmit={submitChangePassword} className="form-stack profile-security-form" aria-busy={passwordSaving || undefined}>
-                <hr className="modal-section-divider" />
-                <p className="eyebrow">{t("profile.securityHeading")}</p>
-                <div className="form-field">
-                  <label htmlFor="modal-current-password" className="form-field-label">
-                    <span>{t("profile.currentPasswordLabel")}</span>
-                  </label>
-                  <input
-                    id="modal-current-password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    minLength={8}
-                    maxLength={100}
-                    disabled={passwordSaving}
-                    className="input-text"
-                    value={currentPasswordInput}
-                    onChange={(event) => setCurrentPasswordInput(event.target.value)}
-                  />
-                </div>
-                <div className="form-field">
-                  <label htmlFor="modal-new-password" className="form-field-label">
-                    <span>{t("profile.newPasswordLabel")}</span>
-                  </label>
-                  <input
-                    id="modal-new-password"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
-                    maxLength={100}
-                    disabled={passwordSaving}
-                    className="input-text"
-                    value={newPasswordInput}
-                    onChange={(event) => setNewPasswordInput(event.target.value)}
-                  />
-                </div>
-                <div className="form-field">
-                  <label htmlFor="modal-confirm-new-password" className="form-field-label">
-                    <span>{t("profile.confirmNewPasswordLabel")}</span>
-                  </label>
-                  <input
-                    id="modal-confirm-new-password"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
-                    maxLength={100}
-                    disabled={passwordSaving}
-                    className="input-text"
-                    value={confirmNewPasswordInput}
-                    onChange={(event) => setConfirmNewPasswordInput(event.target.value)}
-                  />
-                </div>
-                {passwordError && (
-                  <p className="form-error" role="alert">
-                    {passwordError}
-                  </p>
-                )}
-                <div className="modal-actions">
-                  <button
-                    type="submit"
-                    className="btn btn-secondary"
-                    disabled={passwordSaving}
-                    aria-busy={passwordSaving || undefined}
-                  >
-                    {passwordSaving && <span className="btn-spinner" aria-hidden="true" />}
-                    <span>
-                      {passwordSaving ? t("profile.changingPassword") : t("profile.changePasswordButton")}
-                    </span>
-                  </button>
-                </div>
-              </form>
-            )}
-            {!isDevMockSession(token) && (
-              <div className="form-stack profile-security-form">
-                <hr className="modal-section-divider" />
-                <p className="eyebrow">{t("profile.emailVerificationHeading")}</p>
-                <p className="form-field-hint">
-                  {user.emailVerified ? t("profile.emailVerifiedBadge") : t("profile.emailUnverifiedBadge")}
-                </p>
-                {!user.emailVerified && (
-                  <>
-                    <div className="modal-actions">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={emailVerifyBusy}
-                        onClick={() => void handleSendEmailVerification()}
-                      >
-                        {emailVerifyBusy ? t("profile.sendingVerification") : t("profile.sendVerificationButton")}
-                      </button>
-                    </div>
-                    {emailVerifyDevCode && (
-                      <p className="form-field-hint">
-                        {t("profile.verificationDevCodeHint", { code: emailVerifyDevCode })}
-                      </p>
-                    )}
-                    <form onSubmit={handleVerifyEmailCode} className="form-stack">
-                      <div className="form-field">
-                        <label htmlFor="modal-verify-email-code" className="form-field-label">
-                          <span>{t("profile.verificationCodeLabel")}</span>
-                        </label>
-                        <input
-                          id="modal-verify-email-code"
-                          type="text"
-                          inputMode="numeric"
-                          required
-                          minLength={6}
-                          maxLength={6}
-                          className="input-text"
-                          placeholder={t("profile.verificationCodePlaceholder")}
-                          value={emailVerifyCode}
-                          onChange={(e) => setEmailVerifyCode(e.target.value)}
-                          disabled={emailVerifyBusy}
-                        />
-                      </div>
-                      <div className="modal-actions">
-                        <button type="submit" className="btn btn-primary" disabled={emailVerifyBusy}>
-                          {emailVerifyBusy ? t("profile.verifyingEmail") : t("profile.verifyEmailButton")}
-                        </button>
-                      </div>
-                    </form>
-                  </>
-                )}
-
-                <hr className="modal-section-divider" />
-                <p className="eyebrow">{t("profile.twoFactorHeading")}</p>
-                <p className="form-field-hint">
-                  {user.twoFactorEnabled ? t("profile.twoFactorEnabledBadge") : t("profile.twoFactorDisabledBadge")}
-                </p>
-                {!user.twoFactorEnabled && !twoFactorSetupSecret && (
-                  <div className="modal-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={twoFactorBusy}
-                      onClick={() => void handleSetupTwoFactor()}
-                    >
-                      {twoFactorBusy ? t("profile.settingUpTwoFactor") : t("profile.setupTwoFactorButton")}
-                    </button>
-                  </div>
-                )}
-                {!user.twoFactorEnabled && twoFactorSetupSecret && (
-                  <form onSubmit={handleEnableTwoFactor} className="form-stack">
-                    <div className="form-field">
-                      <label htmlFor="modal-2fa-secret" className="form-field-label">
-                        <span>{t("profile.twoFactorSecretLabel")}</span>
-                      </label>
-                      <input
-                        id="modal-2fa-secret"
-                        type="text"
-                        readOnly
-                        className="input-text"
-                        value={twoFactorSetupSecret}
-                      />
-                    </div>
-                    <div className="form-field">
-                      <label htmlFor="modal-2fa-enable-code" className="form-field-label">
-                        <span>{t("profile.twoFactorCodeInputLabel")}</span>
-                      </label>
-                      <input
-                        id="modal-2fa-enable-code"
-                        type="text"
-                        inputMode="numeric"
-                        required
-                        minLength={6}
-                        maxLength={6}
-                        className="input-text"
-                        placeholder={t("profile.twoFactorCodePlaceholder")}
-                        value={twoFactorSetupCode}
-                        onChange={(e) => setTwoFactorSetupCode(e.target.value)}
-                        disabled={twoFactorBusy}
-                      />
-                    </div>
-                    <div className="modal-actions">
-                      <button type="submit" className="btn btn-primary" disabled={twoFactorBusy}>
-                        {twoFactorBusy ? t("profile.enablingTwoFactor") : t("profile.enableTwoFactorButton")}
-                      </button>
-                    </div>
-                  </form>
-                )}
-                {user.twoFactorEnabled && (
-                  <form onSubmit={handleDisableTwoFactor} className="form-stack">
-                    <div className="form-field">
-                      <label htmlFor="modal-2fa-disable-code" className="form-field-label">
-                        <span>{t("profile.twoFactorCodeInputLabel")}</span>
-                      </label>
-                      <input
-                        id="modal-2fa-disable-code"
-                        type="text"
-                        required
-                        minLength={6}
-                        maxLength={32}
-                        className="input-text"
-                        placeholder={t("profile.twoFactorCodePlaceholder")}
-                        value={twoFactorSetupCode}
-                        onChange={(e) => setTwoFactorSetupCode(e.target.value)}
-                        disabled={twoFactorBusy}
-                      />
-                    </div>
-                    <div className="modal-actions">
-                      <button type="submit" className="btn btn-secondary" disabled={twoFactorBusy}>
-                        {twoFactorBusy ? t("profile.disablingTwoFactor") : t("profile.disableTwoFactorButton")}
-                      </button>
-                    </div>
-                  </form>
-                )}
-                {twoFactorRecoveryCodes.length > 0 && (
-                  <div className="form-field">
-                    <p className="form-field-hint">{t("profile.twoFactorRecoveryHeading")}</p>
-                    <code>{twoFactorRecoveryCodes.join(" · ")}</code>
-                  </div>
-                )}
-                {twoFactorError && (
-                  <p className="form-error" role="alert">
-                    {twoFactorError}
-                  </p>
-                )}
-
-                <hr className="modal-section-divider" />
-                <p className="eyebrow">{t("profile.notificationsHeading")}</p>
-                <p className="form-field-hint">
-                  {notificationPermission === "granted"
-                    ? t("profile.notificationsEnabled")
-                    : notificationPermission === "denied"
-                      ? t("profile.notificationsBlocked")
-                      : t("profile.notificationsPrompt")}
-                </p>
-                {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
-                  <div className="modal-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() =>
-                        void requestBrowserNotificationPermission().then((perm) =>
-                          setNotificationPermission(perm),
-                        )
-                      }
-                    >
-                      {t("profile.enableNotificationsButton")}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-      </MotionPresence>
-
-      {/* Room Workspace Members Modal */}
-      <MotionPresence present={showRoomMembersModal && !discardForm && !!currentRoom && !!selectedWorkspace}>
-        {currentRoom && selectedWorkspace && (
-          <div className="modal-overlay" onClick={() => setShowRoomMembersModal(false)}>
-            <section
-              className="modal-card room-members-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="modal-room-members-title"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="modal-header">
-                <h3 id="modal-room-members-title">
-                  {t("members.modalTitle")}
-                </h3>
-                <button
-                  type="button"
-                  className="btn-icon"
-                  onClick={() => setShowRoomMembersModal(false)}
-                  aria-label={t("common.close")}
-                  title={t("common.close")}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </div>
-              <div className="room-members-modal-body">
-                <WorkspaceMembers
-                  key={`${user.id}:${selectedWorkspace.id}:${currentRoom.id}:${membersVersion}`}
-                  workspaceId={selectedWorkspace.id}
-                  token={token}
-                  userId={user.id}
-                  currentUser={memberCurrentUser}
-                  owner={selectedWorkspace.role === "OWNER"}
-                  lang={lang}
-                  refresh={membersVersion}
-                  rooms={rooms}
-                  roomsLoading={roomsLoading}
-                  roomLoadError={roomLoadError}
-                  liveRoomId={currentRoom.id}
-                  liveRoomName={currentRoom.name}
-                  liveRoomUserIds={liveRoomUserIds}
-                  compactHeader
-                  onUpdated={retryRooms}
-                  onInvite={() => {
-                    setShowRoomMembersModal(false);
-                    openInviteForm();
-                  }}
-                />
-              </div>
-              <div className="modal-actions">
-                {selectedWorkspace.role === "OWNER" && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      setShowRoomMembersModal(false);
-                      openInviteForm();
-                    }}
-                  >
-                    <UserPlus size={14} aria-hidden="true" />
-                    <span>{t("members.addMemberButton")}</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setShowRoomMembersModal(false)}
-                >
-                  {t("common.close")}
-                </button>
-              </div>
-            </section>
-          </div>
-        )}
-      </MotionPresence>
-
-      {/* Create Workspace Modal */}
-      <MotionPresence present={showCreateWsModal && !discardForm}>
-        <div className="modal-overlay" onClick={closeWorkspaceForm}>
-          <section
-            className="modal-card workspace-create-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-workspace-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3 id="modal-workspace-title">{t("sidebar.newWorkspace")}</h3>
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={closeWorkspaceForm}
-                disabled={workspaceSubmitting}
-                aria-label={t("common.close")}
-                title={t("common.close")}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </div>
-            <form onSubmit={createWorkspace} className="form-stack" aria-busy={workspaceSubmitting || undefined}>
-              <div className="form-field">
-                <label htmlFor="modal-workspace-name" className="form-field-label">
-                  <span>{t("workspace.nameLabel")}</span>
-                  <span className="form-required-mark" aria-hidden="true">*</span>
-                </label>
-                <input
-                  id="modal-workspace-name"
-                  autoComplete="organization"
-                  required
-                  className="input-text"
-                  placeholder={t("workspace.newNamePlaceholder")}
-                  minLength={3}
-                  maxLength={120}
-                  disabled={workspaceSubmitting}
-                  value={workspaceName}
-                  onChange={(event) => {
-                    setWorkspaceName(event.target.value);
-                    setWorkspaceError("");
-                  }}
-                  aria-invalid={Boolean(workspaceError) || undefined}
-                  aria-describedby={workspaceError ? "modal-workspace-error" : "modal-workspace-hint"}
-                />
-                <p id="modal-workspace-hint" className="form-field-hint">
-                  {t("workspace.nameHint")}
-                </p>
-              </div>
-              {workspaceError && (
-                <p id="modal-workspace-error" className="form-error" role="alert">
-                  {workspaceError}
-                </p>
-              )}
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={closeWorkspaceForm}
-                  disabled={workspaceSubmitting}
-                >
-                  {t("common.close")}
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={workspaceSubmitting}
-                  aria-busy={workspaceSubmitting || undefined}
-                >
-                  {workspaceSubmitting && <span className="btn-spinner" aria-hidden="true" />}
-                  <span>
-                    {workspaceSubmitting ? t("workspace.creating") : t("workspace.createButton")}
-                  </span>
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      </MotionPresence>
-
-      {/* Edit / Delete Workspace Modal */}
-      <MotionPresence present={!!editingWorkspace && !confirmDeleteWorkspace && !discardForm}>
-        {editingWorkspace && (
-          <div className="modal-overlay" onClick={closeEditWorkspaceForm}>
-            <section
-              className="modal-card workspace-edit-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="modal-edit-workspace-title"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="modal-header">
-                <h3 id="modal-edit-workspace-title">{t("workspace.editBoxTitle")}</h3>
-                <button
-                  type="button"
-                  className="btn-icon"
-                  onClick={closeEditWorkspaceForm}
-                  disabled={editWorkspaceSubmitting}
-                  aria-label={t("common.close")}
-                  title={t("common.close")}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </div>
-              <form onSubmit={submitEditWorkspace} className="form-stack" aria-busy={editWorkspaceSubmitting || undefined}>
-                <div className="form-field">
-                  <label htmlFor="modal-edit-workspace-name" className="form-field-label">
-                    <span>{t("workspace.nameLabel")}</span>
-                    <span className="form-required-mark" aria-hidden="true">*</span>
-                  </label>
-                  <input
-                    id="modal-edit-workspace-name"
-                    autoComplete="organization"
-                    required
-                    className="input-text"
-                    placeholder={t("workspace.newNamePlaceholder")}
-                    minLength={3}
-                    maxLength={120}
-                    disabled={editWorkspaceSubmitting}
-                    value={editWorkspaceName}
-                    onChange={(event) => {
-                      setEditWorkspaceName(event.target.value);
-                      setEditWorkspaceError("");
-                    }}
-                    aria-invalid={Boolean(editWorkspaceError) || undefined}
-                    aria-describedby={editWorkspaceError ? "modal-edit-workspace-error" : "modal-edit-workspace-hint"}
-                  />
-                  <p id="modal-edit-workspace-hint" className="form-field-hint">
-                    {t("workspace.nameHint")}
-                  </p>
-                </div>
-                {editWorkspaceError && (
-                  <p id="modal-edit-workspace-error" className="form-error" role="alert">
-                    {editWorkspaceError}
-                  </p>
-                )}
-                <div className="room-danger-zone">
-                  <div className="room-danger-copy">
-                    <strong>{t("workspace.dangerZoneHeading")}</strong>
-                    <p>{t("workspace.dangerZoneDesc")}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-sm"
-                    disabled={editWorkspaceSubmitting}
-                    onClick={() => setConfirmDeleteWorkspace(true)}
-                  >
-                    <Trash2 size={14} aria-hidden="true" />
-                    <span>{t("workspace.deleteWorkspaceButton")}</span>
-                  </button>
-                </div>
-                <div className="modal-actions">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={closeEditWorkspaceForm}
-                    disabled={editWorkspaceSubmitting}
-                  >
-                    {t("common.close")}
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={editWorkspaceSubmitting}
-                    aria-busy={editWorkspaceSubmitting || undefined}
-                  >
-                    {editWorkspaceSubmitting && <span className="btn-spinner" aria-hidden="true" />}
-                    <span>{editWorkspaceSubmitting ? t("common.saving") : t("workspace.saveChangesButton")}</span>
-                  </button>
-                </div>
-              </form>
-            </section>
-          </div>
-        )}
-      </MotionPresence>
-
-      {/* Create Room Modal */}
-      <MotionPresence present={showCreateRoomModal && !discardForm}>
-        <div className="modal-overlay" onClick={closeRoomForm}>
-          <section
-            className="modal-card room-create-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-room-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3 id="modal-room-title">{t("room.createBoxTitle")}</h3>
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={closeRoomForm}
-                disabled={roomSubmitting}
-                aria-label={t("common.close")}
-                title={t("common.close")}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </div>
-            <form onSubmit={createRoom} className="form-stack" aria-busy={roomSubmitting || undefined}>
-              <div className="form-field">
-                <label htmlFor="modal-room-name" className="form-field-label">
-                  <span>{t("room.nameLabel")}</span>
-                  <span className="form-required-mark" aria-hidden="true">*</span>
-                </label>
-                <input
-                  id="modal-room-name"
-                  autoComplete="off"
-                  required
-                  className="input-text"
-                  placeholder={t("room.namePlaceholder")}
-                  minLength={2}
-                  maxLength={120}
-                  disabled={roomSubmitting}
-                  value={newRoomName}
-                  onChange={(event) => {
-                    setNewRoomName(event.target.value);
-                    setRoomMessage("");
-                  }}
-                  aria-invalid={Boolean(roomMessage) || undefined}
-                  aria-describedby={roomMessage ? "modal-room-error" : "modal-room-name-hint"}
-                />
-                <p id="modal-room-name-hint" className="form-field-hint">
-                  {t("room.nameHint")}
-                </p>
-              </div>
-              <div className="form-field">
-                <label htmlFor="modal-room-desc" className="form-field-label">
-                  <span>{t("room.descLabel")}</span>
-                  <span className="form-optional-tag">({t("room.descOptionalTag")})</span>
-                </label>
-                <input
-                  id="modal-room-desc"
-                  autoComplete="off"
-                  className="input-text"
-                  placeholder={t("room.descPlaceholder")}
-                  maxLength={255}
-                  disabled={roomSubmitting}
-                  value={newRoomDesc}
-                  onChange={(event) => setNewRoomDesc(event.target.value)}
-                />
-              </div>
-              {roomMessage && (
-                <p id="modal-room-error" className="form-error" role="alert">
-                  {roomMessage}
-                </p>
-              )}
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={closeRoomForm}
-                  disabled={roomSubmitting}
-                >
-                  {t("common.close")}
-                </button>
-                <button
-                  type="submit"
-                  disabled={roomSubmitting}
-                  className="btn btn-primary"
-                  aria-busy={roomSubmitting || undefined}
-                >
-                  {roomSubmitting && <span className="btn-spinner" aria-hidden="true" />}
-                  <span>{roomSubmitting ? t("workspace.creating") : t("room.createButton")}</span>
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      </MotionPresence>
-
-      {/* Edit / Delete Room Modal */}
-      <MotionPresence present={!!editingRoom && !confirmDeleteRoom && !discardForm}>
-        {editingRoom && (
-          <div className="modal-overlay" onClick={closeEditRoomForm}>
-            <section
-              className="modal-card room-edit-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="modal-edit-room-title"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="modal-header">
-                <h3 id="modal-edit-room-title">{t("room.editBoxTitle")}</h3>
-                <button
-                  type="button"
-                  className="btn-icon"
-                  onClick={closeEditRoomForm}
-                  disabled={editRoomSubmitting}
-                  aria-label={t("common.close")}
-                  title={t("common.close")}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </div>
-              <form onSubmit={submitEditRoom} className="form-stack" aria-busy={editRoomSubmitting || undefined}>
-                <div className="form-field">
-                  <label htmlFor="modal-edit-room-name" className="form-field-label">
-                    <span>{t("room.nameLabel")}</span>
-                    <span className="form-required-mark" aria-hidden="true">*</span>
-                  </label>
-                  <input
-                    id="modal-edit-room-name"
-                    autoComplete="off"
-                    required
-                    className="input-text"
-                    placeholder={t("room.namePlaceholder")}
-                    minLength={2}
-                    maxLength={120}
-                    disabled={editRoomSubmitting}
-                    value={editRoomName}
-                    onChange={(event) => {
-                      setEditRoomName(event.target.value);
-                      setEditRoomError("");
-                    }}
-                    aria-invalid={Boolean(editRoomError) || undefined}
-                    aria-describedby={editRoomError ? "modal-edit-room-error" : "modal-edit-room-name-hint"}
-                  />
-                  <p id="modal-edit-room-name-hint" className="form-field-hint">
-                    {t("room.nameHint")}
-                  </p>
-                </div>
-                <div className="form-field">
-                  <label htmlFor="modal-edit-room-desc" className="form-field-label">
-                    <span>{t("room.descLabel")}</span>
-                    <span className="form-optional-tag">({t("room.descOptionalTag")})</span>
-                  </label>
-                  <input
-                    id="modal-edit-room-desc"
-                    autoComplete="off"
-                    className="input-text"
-                    placeholder={t("room.descPlaceholder")}
-                    maxLength={255}
-                    disabled={editRoomSubmitting}
-                    value={editRoomDesc}
-                    onChange={(event) => setEditRoomDesc(event.target.value)}
-                  />
-                </div>
-                {editRoomError && (
-                  <p id="modal-edit-room-error" className="form-error" role="alert">
-                    {editRoomError}
-                  </p>
-                )}
-                {selectedWorkspace?.role === "OWNER" && (
-                  <div className="room-danger-zone">
-                    <div className="room-danger-copy">
-                      <strong>{t("room.dangerZoneHeading")}</strong>
-                      <p>{t("room.dangerZoneDesc")}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      disabled={editRoomSubmitting}
-                      onClick={() => setConfirmDeleteRoom(true)}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                      <span>{t("room.deleteRoomButton")}</span>
-                    </button>
-                  </div>
-                )}
-                <div className="modal-actions">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={closeEditRoomForm}
-                    disabled={editRoomSubmitting}
-                  >
-                    {t("common.close")}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={editRoomSubmitting}
-                    className="btn btn-primary"
-                    aria-busy={editRoomSubmitting || undefined}
-                  >
-                    {editRoomSubmitting && <span className="btn-spinner" aria-hidden="true" />}
-                    <span>{editRoomSubmitting ? t("common.saving") : t("room.saveChangesButton")}</span>
-                  </button>
-                </div>
-              </form>
-            </section>
-          </div>
-        )}
-      </MotionPresence>
-
-      {/* Invite Member Modal */}
-      <MotionPresence present={showInviteModal && !discardForm}>
-        <div className="modal-overlay" onClick={closeInviteForm}>
-          <section
-            className="modal-card invite-member-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-invite-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3 id="modal-invite-title">{t("workspace.inviteButton")}</h3>
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={closeInviteForm}
-                disabled={inviteSubmitting}
-                aria-label={t("common.close")}
-                title={t("common.close")}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </div>
-            <form onSubmit={inviteMember} className="form-stack" aria-busy={inviteSubmitting || undefined}>
-              <div className="form-field">
-                <label htmlFor="modal-invite-email" className="form-field-label">
-                  <span>{t("workspace.inviteEmailLabel")}</span>
-                  <span className="form-required-mark" aria-hidden="true">*</span>
-                </label>
-                <input
-                  id="modal-invite-email"
-                  required
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  spellCheck={false}
-                  maxLength={254}
-                  className="input-text"
-                  placeholder={t("workspace.invitePlaceholder")}
-                  value={inviteEmail}
-                  onChange={(event) => {
-                    setInviteEmail(event.target.value);
-                    setInviteError("");
-                  }}
-                  disabled={inviteSubmitting}
-                  aria-invalid={Boolean(inviteError) || undefined}
-                  aria-describedby={inviteError ? "modal-invite-error" : "modal-invite-hint"}
-                />
-                <p id="modal-invite-hint" className="form-field-hint">
-                  {t("workspace.inviteEmailHint")}
-                </p>
-              </div>
-              {inviteError && (
-                <p id="modal-invite-error" className="form-error" role="alert">
-                  {inviteError}
-                </p>
-              )}
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={closeInviteForm}
-                  disabled={inviteSubmitting}
-                >
-                  {t("common.close")}
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={inviteSubmitting}
-                  aria-busy={inviteSubmitting || undefined}
-                >
-                  {inviteSubmitting && <span className="btn-spinner" aria-hidden="true" />}
-                  <span>
-                    {inviteSubmitting ? t("workspace.inviting") : t("workspace.inviteButton")}
-                  </span>
-                </button>
-              </div>
-            </form>
-            {!isDevMockSession(token) && (
-              <div className="form-stack profile-security-form">
-                <hr className="modal-section-divider" />
-                <p className="eyebrow">{t("workspace.inviteLinkHeading")}</p>
-                <p className="form-field-hint">{t("workspace.inviteLinkHint")}</p>
-                {generatedInviteUrl && (
-                  <div className="form-field">
-                    <input
-                      type="text"
-                      readOnly
-                      className="input-text"
-                      value={generatedInviteUrl}
-                      aria-label={t("workspace.inviteLinkHeading")}
-                    />
-                  </div>
-                )}
-                <div className="modal-actions">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={generatingInviteLink}
-                    onClick={() => void createOneClickInviteLink()}
-                  >
-                    {generatingInviteLink
-                      ? t("workspace.creatingInviteLink")
-                      : t("workspace.createInviteLinkButton")}
-                  </button>
-                  {generatedInviteUrl && (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(generatedInviteUrl).then(() => {
-                          addToast(t("workspace.inviteLinkCopiedToast"), "success");
-                        });
-                      }}
-                    >
-                      <Copy size={14} aria-hidden="true" />
-                      <span>{t("workspace.copyInviteLinkButton")}</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-        </div>
-      </MotionPresence>
+      <WorkspaceModals
+        user={user}
+        token={token}
+        lang={lang}
+        discardForm={discardForm}
+        selectedWorkspace={selectedWorkspace}
+        currentRoom={currentRoom}
+        rooms={rooms}
+        roomsLoading={roomsLoading}
+        roomLoadError={roomLoadError}
+        membersVersion={membersVersion}
+        memberCurrentUser={memberCurrentUser}
+        liveRoomUserIds={liveRoomUserIds}
+        showRoomMembersModal={showRoomMembersModal}
+        showCreateWsModal={showCreateWsModal}
+        workspaceName={workspaceName}
+        workspaceError={workspaceError}
+        workspaceSubmitting={workspaceSubmitting}
+        editingWorkspace={editingWorkspace}
+        confirmDeleteWorkspace={confirmDeleteWorkspace}
+        editWorkspaceName={editWorkspaceName}
+        editWorkspaceError={editWorkspaceError}
+        editWorkspaceSubmitting={editWorkspaceSubmitting}
+        showCreateRoomModal={showCreateRoomModal}
+        newRoomName={newRoomName}
+        newRoomDesc={newRoomDesc}
+        roomMessage={roomMessage}
+        roomSubmitting={roomSubmitting}
+        editingRoom={editingRoom}
+        confirmDeleteRoom={confirmDeleteRoom}
+        editRoomName={editRoomName}
+        editRoomDesc={editRoomDesc}
+        editRoomError={editRoomError}
+        editRoomSubmitting={editRoomSubmitting}
+        showInviteModal={showInviteModal}
+        inviteEmail={inviteEmail}
+        inviteError={inviteError}
+        inviteSubmitting={inviteSubmitting}
+        generatedInviteUrl={generatedInviteUrl}
+        generatingInviteLink={generatingInviteLink}
+        t={t}
+        setDiscardForm={setDiscardForm}
+        setShowProfileModal={setShowProfileModal}
+        setShowCreateWsModal={setShowCreateWsModal}
+        setWorkspaceName={setWorkspaceName}
+        setWorkspaceError={setWorkspaceError}
+        setEditingWorkspace={setEditingWorkspace}
+        setEditWorkspaceName={setEditWorkspaceName}
+        setEditWorkspaceError={setEditWorkspaceError}
+        setConfirmDeleteWorkspace={setConfirmDeleteWorkspace}
+        restoreWorkspaceManageFocus={restoreWorkspaceManageFocus}
+        setShowCreateRoomModal={setShowCreateRoomModal}
+        setNewRoomName={setNewRoomName}
+        setNewRoomDesc={setNewRoomDesc}
+        setRoomMessage={setRoomMessage}
+        setEditingRoom={setEditingRoom}
+        setEditRoomName={setEditRoomName}
+        setEditRoomDesc={setEditRoomDesc}
+        setEditRoomError={setEditRoomError}
+        setConfirmDeleteRoom={setConfirmDeleteRoom}
+        restoreManagedRoomFocus={restoreManagedRoomFocus}
+        setShowInviteModal={setShowInviteModal}
+        setInviteEmail={setInviteEmail}
+        setInviteError={setInviteError}
+        setShowRoomMembersModal={setShowRoomMembersModal}
+        executeDeleteWorkspace={executeDeleteWorkspace}
+        executeDeleteRoom={executeDeleteRoom}
+        retryRooms={retryRooms}
+        openInviteForm={openInviteForm}
+        closeWorkspaceForm={closeWorkspaceForm}
+        createWorkspace={createWorkspace}
+        closeEditWorkspaceForm={closeEditWorkspaceForm}
+        submitEditWorkspace={submitEditWorkspace}
+        closeRoomForm={closeRoomForm}
+        createRoom={createRoom}
+        closeEditRoomForm={closeEditRoomForm}
+        submitEditRoom={submitEditRoom}
+        closeInviteForm={closeInviteForm}
+        inviteMember={inviteMember}
+        createOneClickInviteLink={createOneClickInviteLink}
+        addToast={addToast}
+      />
     </div>
   );
 }

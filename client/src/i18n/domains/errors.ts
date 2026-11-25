@@ -22,6 +22,11 @@ const errorsVi = {
       namePrefix: 'Tên phòng: ',
       generic: 'Không thể tạo phòng. Vui lòng kiểm tra tên và thử lại.',
     },
+    boundary: {
+      title: 'Đã xảy ra sự cố giao diện',
+      description: 'Ứng dụng gặp lỗi bất ngờ và đã tự động ghi nhận để khắc phục. Vui lòng tải lại trang.',
+      reloadButton: 'Tải lại ứng dụng',
+    },
   },
 } as const
 
@@ -48,6 +53,11 @@ const errorsEn = {
       namePrefix: 'Room name: ',
       generic: 'Failed to create room. Please check the name and try again.',
     },
+    boundary: {
+      title: 'Something went wrong',
+      description: 'An unexpected interface error occurred and has been reported. Please reload the page.',
+      reloadButton: 'Reload application',
+    },
   },
 } as const satisfies ErrorsShape
 
@@ -71,6 +81,11 @@ const errorsJa = {
       nameLength: 'ルーム名は2〜120文字で入力してください。',
       namePrefix: 'ルーム名: ',
       generic: 'ルームを作成できませんでした。名前を確認して再試行してください。',
+    },
+    boundary: {
+      title: '画面の表示中にエラーが発生しました',
+      description: '予期しないエラーが発生し、自動的に記録されました。ページを再読み込みしてください。',
+      reloadButton: '再読み込み',
     },
   },
 } as const satisfies ErrorsShape

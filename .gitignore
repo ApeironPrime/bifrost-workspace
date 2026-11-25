@@ -11,3 +11,5 @@ secrets/
 **/.agents/
 **/.claude/
 **/.windsurf/
+client/test-results/
+client/playwright-report/
