@@ -7,6 +7,7 @@ import {
   type RateLimitRequestHandler,
   type Store,
 } from "express-rate-limit";
+import { createRedisRateLimitStore, type RedisRateLimitClient } from "./redisCluster.js";
 
 export const AUTH_RATE_LIMIT_MESSAGE =
   "Quá nhiều yêu cầu xác thực. Vui lòng thử lại sau ít phút.";
@@ -42,6 +43,7 @@ export interface AuthRateLimitOptions {
   env?: NodeJS.ProcessEnv;
   settings?: Partial<AuthRateLimitSettings>;
   hmacSecret?: Buffer | string;
+  redisClient?: RedisRateLimitClient | null;
   stores?: {
     loginAccount?: Store;
     loginIp?: Store;
@@ -235,14 +237,29 @@ export function createAuthRateLimiters(options: AuthRateLimitOptions = {}): Auth
     ...options.settings,
   };
 
-  // Process-local HMAC secret resets on restart (matching in-memory MemoryStore).
-  // Migration note: multi-instance Redis deployments must supply a shared stable HMAC secret.
-  const hmacSecret = options.hmacSecret ?? randomBytes(32);
+  const envSource = options.env ?? process.env;
+  const hmacSecret =
+    options.hmacSecret ??
+    (envSource.RATE_LIMIT_HMAC_SECRET?.trim() || undefined) ??
+    randomBytes(32);
 
+  const redisClient = options.redisClient ?? null;
   const stores = {
-    loginAccount: options.stores?.loginAccount ?? new MemoryStore(),
-    loginIp: options.stores?.loginIp ?? new MemoryStore(),
-    registerIp: options.stores?.registerIp ?? new MemoryStore(),
+    loginAccount:
+      options.stores?.loginAccount ??
+      (redisClient
+        ? createRedisRateLimitStore(redisClient, "loginAccount", settings.loginIpEmailWindowMs)
+        : new MemoryStore()),
+    loginIp:
+      options.stores?.loginIp ??
+      (redisClient
+        ? createRedisRateLimitStore(redisClient, "loginIp", settings.loginIpWindowMs)
+        : new MemoryStore()),
+    registerIp:
+      options.stores?.registerIp ??
+      (redisClient
+        ? createRedisRateLimitStore(redisClient, "registerIp", settings.registerIpWindowMs)
+        : new MemoryStore()),
   };
 
   const errorMessage = { message: AUTH_RATE_LIMIT_MESSAGE };
@@ -319,7 +336,12 @@ export function createAuthRateLimiters(options: AuthRateLimitOptions = {}): Auth
 
 let defaultAuthRateLimiters: AuthRateLimiters | null = null;
 
-/** Lazily initializes and returns the single-process auth rate-limiter bundle. */
+export function configureAuthRateLimiters(options: AuthRateLimitOptions = {}): AuthRateLimiters {
+  defaultAuthRateLimiters = createAuthRateLimiters(options);
+  return defaultAuthRateLimiters;
+}
+
+/** Lazily initializes and returns the auth rate-limiter bundle. */
 export function getAuthRateLimiters(): AuthRateLimiters {
   if (!defaultAuthRateLimiters) {
     defaultAuthRateLimiters = createAuthRateLimiters();

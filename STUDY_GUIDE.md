@@ -53,7 +53,7 @@ Tài liệu này giúp bạn học toàn bộ code của dự án **Bifrost** th
    - [`features/auth/`](client/src/features/auth/): Đăng nhập, đăng ký, onboarding hồ sơ.
    - [`shared/components/`](client/src/shared/components/) & [`shared/hooks/`](client/src/shared/hooks/): Các UI dùng chung (`UserAvatar`, `ConfirmDialog`, `Toast`, `SelectMenu`, `useDialogFocus`, `useDelayedLoading`).
 2. **Đa ngôn ngữ (`i18n`)**: [`client/src/i18n/`](client/src/i18n/) kèm bài kiểm thử AST [`client/dev/i18n.test.mjs`](client/dev/i18n.test.mjs) tự động quét code để đảm bảo không có chữ cứng chưa dịch và không có key thừa.
-3. **Hạ tầng triển khai**: [`docker-compose.prod.yml`](docker-compose.prod.yml), [`docker/Caddyfile`](docker/Caddyfile) (HTTPS tự động), [`client/nginx.conf`](client/nginx.conf).
+3. **Hạ tầng triển khai & Scale ngang**: [`docker-compose.prod.yml`](docker-compose.prod.yml), [`docker/Caddyfile`](docker/Caddyfile) (HTTPS tự động), [`client/nginx.conf`](client/nginx.conf), [`server/src/lib/redisCluster.ts`](server/src/lib/redisCluster.ts) (`@socket.io/redis-adapter` + `RedisRateLimitStore`), [`server/src/lib/avatarStorage.ts`](server/src/lib/avatarStorage.ts) (S3/R2 SigV4 + Disk `/api/avatars`) và [`server/src/lib/cookies.ts`](server/src/lib/cookies.ts) (Refresh Token `HttpOnly` cookie + Access Token in-memory).
 
 ---
 

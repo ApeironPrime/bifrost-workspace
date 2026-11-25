@@ -14,12 +14,23 @@ services:
     volumes:
       - bifrost_postgres_prod:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   server:
     build: ./server
     restart: unless-stopped
     command: sh -c "npx prisma migrate deploy --config prisma7.config.ts && npm start"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     secrets:
       - turn_shared_secret
@@ -30,11 +41,16 @@ services:
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
       DATABASE_URL: postgresql://${POSTGRES_USER:-bifrost}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bifrost_db}?schema=public
+      REDIS_URL: redis://redis:6379
+      RATE_LIMIT_HMAC_SECRET: ${RATE_LIMIT_HMAC_SECRET:?RATE_LIMIT_HMAC_SECRET is required}
+      AVATAR_STORAGE_DIR: /data/avatars
       TRUST_PROXY: 172.16.0.0/12,10.0.0.0/8
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302}
       TURN_URLS: turn:${BIFROST_DOMAIN}:3478?transport=udp,turn:${BIFROST_DOMAIN}:3478?transport=tcp
       TURN_SHARED_SECRET_FILE: /run/secrets/turn_shared_secret
       TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-900}
+    volumes:
+      - bifrost_avatar_prod:/data/avatars
 
   client:
     build:
@@ -90,5 +106,6 @@ secrets:
 
 volumes:
   bifrost_postgres_prod:
+  bifrost_avatar_prod:
   bifrost_caddy_data:
   bifrost_caddy_config:

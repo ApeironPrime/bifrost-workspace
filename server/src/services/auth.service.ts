@@ -217,17 +217,44 @@ export async function getCurrentUser(db: PrismaClient, userId: string) {
   return { user: publicUser(user) };
 }
 
+import { createAvatarStorageFromEnv, type AvatarStorage } from "../lib/avatarStorage.js";
+
+const defaultAvatarStorage = createAvatarStorageFromEnv();
+
+async function persistAvatarIfNeeded(
+  hasAvatar: boolean,
+  avatarDataUrl: unknown,
+  avatarStorage: AvatarStorage,
+): Promise<string | null | undefined> {
+  if (!hasAvatar) return undefined;
+  const validatedAvatar = validateAvatarDataUrl(avatarDataUrl);
+  if (!validatedAvatar) return null;
+  try {
+    return await avatarStorage.storeAvatar(validatedAvatar);
+  } catch (error) {
+    throw new AuthServiceError(
+      400,
+      error instanceof Error ? error.message : "Không thể lưu ảnh đại diện.",
+    );
+  }
+}
+
 export async function updateUserMe(
   db: PrismaClient,
   userId: string,
   input: { name: string; hasAvatar: boolean; avatarDataUrl?: unknown },
+  avatarStorage: AvatarStorage = defaultAvatarStorage,
 ) {
-  const validatedAvatar = input.hasAvatar ? validateAvatarDataUrl(input.avatarDataUrl) : undefined;
+  const storedAvatarUrl = await persistAvatarIfNeeded(
+    input.hasAvatar,
+    input.avatarDataUrl,
+    avatarStorage,
+  );
   if (input.hasAvatar && db.userProfile) {
     await db.userProfile.upsert({
       where: { userId },
-      create: { userId, avatarDataUrl: validatedAvatar ?? null },
-      update: { avatarDataUrl: validatedAvatar ?? null },
+      create: { userId, avatarDataUrl: storedAvatarUrl ?? null },
+      update: { avatarDataUrl: storedAvatarUrl ?? null },
     });
   }
 
@@ -243,19 +270,24 @@ export async function completeUserProfile(
   db: PrismaClient,
   userId: string,
   input: { name: string; hasAvatar: boolean; avatarDataUrl?: unknown },
+  avatarStorage: AvatarStorage = defaultAvatarStorage,
 ) {
-  const validatedAvatar = input.hasAvatar ? validateAvatarDataUrl(input.avatarDataUrl) : undefined;
+  const storedAvatarUrl = await persistAvatarIfNeeded(
+    input.hasAvatar,
+    input.avatarDataUrl,
+    avatarStorage,
+  );
   if (db.userProfile) {
     const existingProfile = await db.userProfile.findUnique({ where: { userId } });
     await db.userProfile.upsert({
       where: { userId },
       create: {
         userId,
-        avatarDataUrl: input.hasAvatar ? (validatedAvatar ?? null) : null,
+        avatarDataUrl: input.hasAvatar ? (storedAvatarUrl ?? null) : null,
       },
       update: {
         avatarDataUrl: input.hasAvatar
-          ? (validatedAvatar ?? null)
+          ? (storedAvatarUrl ?? null)
           : (existingProfile?.avatarDataUrl ?? null),
       },
     });

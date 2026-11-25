@@ -53,13 +53,19 @@ cd client
 npm run dev
 ```
 
-## Chạy Production với Docker (HTTPS + Coturn)
+## Chạy Production với Docker (HTTPS + Coturn + Redis Cluster)
 
 ```bash
 node server/scripts/generate-turn-secret.mjs
-# Điền BIFROST_DOMAIN, POSTGRES_PASSWORD, JWT_SECRET vào môi trường
+# Điền BIFROST_DOMAIN, POSTGRES_PASSWORD, JWT_SECRET, RATE_LIMIT_HMAC_SECRET vào môi trường
+# Tuỳ chọn Object Storage (S3/R2): AVATAR_S3_ENDPOINT, AVATAR_S3_BUCKET, AVATAR_S3_ACCESS_KEY_ID, AVATAR_S3_SECRET_ACCESS_KEY
 docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+- **Scale ngang & Bảo mật phiên**:
+  - `REDIS_URL`: Bật `@socket.io/redis-adapter` + `RedisRateLimitStore` chia sẻ trạng thái signaling và rate-limit giữa nhiều replica backend (mặc định fallback single-node khi bỏ trống).
+  - **Avatar Storage**: Lưu ảnh đại diện dạng content-addressed JPEG trên S3/R2 hoặc volume `/api/avatars/<sha256>.jpg` thay vì nhét Base64 vào PostgreSQL.
+  - **Token Hardening**: Refresh token nằm trong cookie `HttpOnly; SameSite=Lax; Path=/api/auth` (`bifrost_rt`), Access token giữ hoàn toàn trong bộ nhớ RAM phía client.
 
 ## Kiểm thử tự động
 
@@ -71,7 +77,7 @@ npm run lint
 npm test
 npm run build
 
-# Server (Prisma generate + tsc + 21 unit/E2E tests + Stage 5 Socket/WebRTC/Auth E2E)
+# Server (Prisma generate + tsc + 27 unit/E2E tests + Stage 5 Socket/WebRTC/Auth E2E)
 cd ../server
 npm test
 ```

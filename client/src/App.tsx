@@ -290,14 +290,20 @@ function App() {
     if (log) chatAtBottomRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 100;
   }, []);
 
-  // Auth states
+  // Auth states (real API access tokens stay in memory; refresh token lives in HttpOnly cookie)
   const [token, setToken] = useState(() => {
     const stored = localStorage.getItem("bifrost_token") ?? "";
-    if (import.meta.env.VITE_DATA_MODE === "api" && isDevMockSession(stored)) {
-      localStorage.removeItem("bifrost_token");
-      return "";
+    if (isDevMockSession(stored)) {
+      if (import.meta.env.VITE_DATA_MODE === "api") {
+        localStorage.removeItem("bifrost_token");
+        return "";
+      }
+      return stored;
     }
-    return stored;
+    if (stored) {
+      localStorage.removeItem("bifrost_token");
+    }
+    return "";
   });
   const tokenRef = useRef(token);
   useEffect(() => {
@@ -310,7 +316,11 @@ function App() {
     }
   }, [token, addToast]);
   const [user, setUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(() => !localStorage.getItem("bifrost_token"));
+  const [authReady, setAuthReady] = useState(() => {
+    const stored = localStorage.getItem("bifrost_token") ?? "";
+    if (isDevMockSession(stored) && import.meta.env.VITE_DATA_MODE !== "api") return false;
+    return !localStorage.getItem("bifrost_has_session") && !localStorage.getItem("bifrost_refresh_token");
+  });
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
@@ -352,7 +362,14 @@ function App() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRoomMembersModal, setShowRoomMembersModal] = useState(false);
 
-  const [workspaceLoading, setWorkspaceLoading] = useState(() => Boolean(localStorage.getItem("bifrost_token")));
+  const [workspaceLoading, setWorkspaceLoading] = useState(() =>
+    Boolean(
+      (isDevMockSession(localStorage.getItem("bifrost_token") ?? "") &&
+        import.meta.env.VITE_DATA_MODE !== "api") ||
+        localStorage.getItem("bifrost_has_session") ||
+        localStorage.getItem("bifrost_refresh_token"),
+    ),
+  );
   const [workspaceLoadError, setWorkspaceLoadError] = useState(false);
   const [workspaceRetry, setWorkspaceRetry] = useState(0);
   const [requestedRoute, setRequestedRoute] = useState(() => readWorkspaceRoute(location.hash));
@@ -706,26 +723,30 @@ function App() {
   }, []);
 
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
-    const currentStored = localStorage.getItem("bifrost_token") ?? "";
-    if (isDevMockSession(currentStored)) return null;
-    const storedRefresh = localStorage.getItem("bifrost_refresh_token");
-    if (!storedRefresh) return null;
+    if (isDevMockSession(tokenRef.current)) return null;
+    const legacyRefresh = localStorage.getItem("bifrost_refresh_token");
+    const hasHint = Boolean(localStorage.getItem("bifrost_has_session") || legacyRefresh);
+    if (!hasHint && !tokenRef.current) return null;
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
 
     const run = (async () => {
       try {
         const res = await fetchAppApi(apiUrl("/auth/refresh"), {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: storedRefresh }),
+          body: JSON.stringify(legacyRefresh ? { refreshToken: legacyRefresh } : {}),
         });
-        if (!res.ok) return null;
+        if (!res.ok) {
+          localStorage.removeItem("bifrost_has_session");
+          localStorage.removeItem("bifrost_refresh_token");
+          return null;
+        }
         const body = (await res.json()) as { token?: string; refreshToken?: string; user?: User };
         if (!body.token) return null;
-        localStorage.setItem("bifrost_token", body.token);
-        if (body.refreshToken) {
-          localStorage.setItem("bifrost_refresh_token", body.refreshToken);
-        }
+        localStorage.setItem("bifrost_has_session", "1");
+        localStorage.removeItem("bifrost_refresh_token");
+        localStorage.removeItem("bifrost_token");
         setToken(body.token);
         if (body.user) {
           setUser(body.user);
@@ -742,6 +763,25 @@ function App() {
     refreshPromiseRef.current = run;
     return run;
   }, []);
+
+  useEffect(() => {
+    if (tokenRef.current) return;
+    const hasHint = Boolean(
+      localStorage.getItem("bifrost_has_session") || localStorage.getItem("bifrost_refresh_token"),
+    );
+    if (!hasHint) return;
+    let cancelled = false;
+    void refreshAccessToken().then((nextToken) => {
+      if (cancelled) return;
+      if (!nextToken) {
+        setAuthReady(true);
+        setWorkspaceLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAccessToken]);
 
   useEffect(() => {
     if (!token) return;
@@ -947,15 +987,19 @@ function App() {
         apiUrl(`/auth/${authMode === "register" ? "register" : "login"}`),
         {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         }
       );
       const body = await response.json();
       if (!response.ok) throw new Error(body.message ?? t("auth.authFailed"));
-      localStorage.setItem("bifrost_token", body.token);
-      if (typeof body.refreshToken === "string" && body.refreshToken) {
-        localStorage.setItem("bifrost_refresh_token", body.refreshToken);
+      if (isDevMockSession(body.token)) {
+        localStorage.setItem("bifrost_token", body.token);
+      } else {
+        localStorage.setItem("bifrost_has_session", "1");
+        localStorage.removeItem("bifrost_token");
+        localStorage.removeItem("bifrost_refresh_token");
       }
       setWorkspaceLoading(true);
       setWorkspaceLoadError(false);
@@ -1798,12 +1842,13 @@ function App() {
   }, [changeRoute, selectedWorkspaceId, railTipStore, clearNoteResyncTimer, applyNoteError, getIceManager, stopAllRoomMedia]);
 
   const logout = useCallback(() => {
-    const refreshTokenToRevoke = localStorage.getItem("bifrost_refresh_token");
-    if (refreshTokenToRevoke && !isDevMockSession(tokenRef.current)) {
+    const legacyRefresh = localStorage.getItem("bifrost_refresh_token");
+    if (!isDevMockSession(tokenRef.current)) {
       void fetchAppApi(apiUrl("/auth/logout"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: refreshTokenToRevoke }),
+        body: JSON.stringify(legacyRefresh ? { refreshToken: legacyRefresh } : {}),
       }).catch(() => {
         /* Best-effort server revocation; local state still clears. */
       });
@@ -1813,6 +1858,7 @@ function App() {
     setIsSidebarOpen(false);setIsRightPanelOpen(false);railTipStore.set(null);
     localStorage.removeItem("bifrost_token");
     localStorage.removeItem("bifrost_refresh_token");
+    localStorage.removeItem("bifrost_has_session");
     if(userId) for(const key of Object.keys(sessionStorage)) if(key.startsWith('bifrost-room-draft:'+encodeURIComponent(userId)+':')) sessionStorage.removeItem(key);
     changeRoute({workspaceId:'',roomId:'',tab:'meeting'},true);
     setToken("");
@@ -1846,6 +1892,7 @@ function App() {
     try {
       const response = await fetchAppApi(apiUrl("/auth/change-password"), {
         method: "POST",
+        credentials: "include",
         headers: authHeaders(),
         body: JSON.stringify({
           currentPassword: currentPasswordInput,
@@ -1855,12 +1902,11 @@ function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.message || t("profile.passwordUpdateFailed"));
       if (body.token) {
-        localStorage.setItem("bifrost_token", body.token);
         setToken(body.token);
       }
-      if (body.refreshToken) {
-        localStorage.setItem("bifrost_refresh_token", body.refreshToken);
-      }
+      localStorage.setItem("bifrost_has_session", "1");
+      localStorage.removeItem("bifrost_token");
+      localStorage.removeItem("bifrost_refresh_token");
       setCurrentPasswordInput("");
       setNewPasswordInput("");
       setConfirmNewPasswordInput("");

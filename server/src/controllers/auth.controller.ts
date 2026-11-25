@@ -2,6 +2,13 @@ import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import {
+  REFRESH_COOKIE_NAME,
+  isSecureCookieRequest,
+  parseCookies,
+  serializeClearRefreshCookie,
+  serializeRefreshCookie,
+} from "../lib/cookies.js";
+import {
   AuthServiceError,
   changeUserPassword,
   completeUserProfile,
@@ -58,6 +65,14 @@ export function createAuthController(db: PrismaClient) {
       try {
         const input = registerSchema.parse(request.body);
         const result = await registerUser(db, input);
+        if (result.refreshToken) {
+          response.setHeader(
+            "Set-Cookie",
+            serializeRefreshCookie(result.refreshToken, {
+              secure: isSecureCookieRequest(request),
+            }),
+          );
+        }
         response.status(201).json(result);
       } catch (error) {
         handleAuthError(error, response, next);
@@ -68,6 +83,14 @@ export function createAuthController(db: PrismaClient) {
       try {
         const input = credentialsSchema.parse(request.body);
         const result = await loginUser(db, input);
+        if (result.refreshToken) {
+          response.setHeader(
+            "Set-Cookie",
+            serializeRefreshCookie(result.refreshToken, {
+              secure: isSecureCookieRequest(request),
+            }),
+          );
+        }
         response.json(result);
       } catch (error) {
         handleAuthError(error, response, next);
@@ -76,8 +99,21 @@ export function createAuthController(db: PrismaClient) {
 
     refresh: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const input = refreshSchema.parse(request.body);
+        const cookies = parseCookies(request.headers.cookie);
+        const candidateToken =
+          typeof request.body?.refreshToken === "string" && request.body.refreshToken.trim()
+            ? request.body.refreshToken
+            : cookies[REFRESH_COOKIE_NAME];
+        const input = refreshSchema.parse({ refreshToken: candidateToken });
         const result = await refreshUserSession(db, input.refreshToken);
+        if (result.refreshToken) {
+          response.setHeader(
+            "Set-Cookie",
+            serializeRefreshCookie(result.refreshToken, {
+              secure: isSecureCookieRequest(request),
+            }),
+          );
+        }
         response.json(result);
       } catch (error) {
         handleAuthError(error, response, next);
@@ -86,8 +122,17 @@ export function createAuthController(db: PrismaClient) {
 
     logout: async (request: Request, response: Response, next: NextFunction) => {
       try {
+        const cookies = parseCookies(request.headers.cookie);
         const parsed = logoutSchema.safeParse(request.body ?? {});
-        await logoutUserSession(db, parsed.success ? parsed.data.refreshToken : undefined);
+        const refreshToken =
+          (parsed.success ? parsed.data.refreshToken : undefined) ?? cookies[REFRESH_COOKIE_NAME];
+        await logoutUserSession(db, refreshToken);
+        response.setHeader(
+          "Set-Cookie",
+          serializeClearRefreshCookie({
+            secure: isSecureCookieRequest(request),
+          }),
+        );
         response.status(204).send();
       } catch (error) {
         handleAuthError(error, response, next);
@@ -98,6 +143,14 @@ export function createAuthController(db: PrismaClient) {
       try {
         const input = changePasswordSchema.parse(request.body);
         const result = await changeUserPassword(db, request.user!.id, input);
+        if (result.refreshToken) {
+          response.setHeader(
+            "Set-Cookie",
+            serializeRefreshCookie(result.refreshToken, {
+              secure: isSecureCookieRequest(request),
+            }),
+          );
+        }
         response.json(result);
       } catch (error) {
         handleAuthError(error, response, next);

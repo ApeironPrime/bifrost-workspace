@@ -7,11 +7,12 @@
     "dev": "npm run build && node dist/index.js",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test tests/test_validation.mjs tests/test_auth_ratelimit.mjs tests/test_turn.mjs && node tests/test_stage5.mjs"
+    "test": "npm run build && node --test tests/test_validation.mjs tests/test_auth_ratelimit.mjs tests/test_turn.mjs tests/test_scale_security.mjs && node tests/test_stage5.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@socket.io/redis-adapter": "^8.3.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
@@ -19,6 +20,7 @@
     "express-rate-limit": "^8.7.4",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0",
+    "redis": "^6.4.0",
     "socket.io": "^4.8.1",
     "zod": "^3.24.2"
   },

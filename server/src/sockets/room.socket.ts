@@ -212,26 +212,28 @@ export function attachRoomSocket(io: Server, db: PrismaClient) {
     const relaySignal = (
       eventName: "webrtc:offer" | "webrtc:answer" | "webrtc:ice-candidate",
     ) => {
-      socket.on(eventName, (rawSignal: unknown) => {
+      socket.on(eventName, async (rawSignal: unknown) => {
         const parsedSignal = signalSchema.safeParse(rawSignal);
         if (!parsedSignal.success) {
           socket.emit("room:error", { message: "Dữ liệu signalling không hợp lệ." });
           return;
         }
 
-        const target = io.sockets.sockets.get(parsedSignal.data.targetId);
+        const [target] = await io.in(parsedSignal.data.targetId).fetchSockets();
         if (!target) {
           socket.emit("room:error", { message: "Peer không còn trong room." });
           return;
         }
 
-        const sharedRoom = findSharedRoom(socket, target);
+        const sharedRoom = [...socket.rooms].find(
+          (roomId) => roomId.startsWith("room:") && target.rooms.has(roomId),
+        );
         if (!sharedRoom) {
           socket.emit("room:error", { message: "Không thể relay signalling đến peer khác room." });
           return;
         }
 
-        target.emit(eventName, {
+        io.to(parsedSignal.data.targetId).emit(eventName, {
           peerId: socket.id,
           payload: parsedSignal.data.payload,
         });
@@ -242,32 +244,33 @@ export function attachRoomSocket(io: Server, db: PrismaClient) {
     relaySignal("webrtc:answer");
     relaySignal("webrtc:ice-candidate");
 
-    socket.on("disconnecting", () => {
+    socket.on("disconnecting", async () => {
       const roomKeys = [...socket.rooms].filter((roomId) => roomId.startsWith("room:"));
       for (const socketRoomKey of roomKeys) {
         const roomId = socketRoomKey.replace("room:", "");
         socket.to(socketRoomKey).emit("room:peer-left", { peerId: socket.id });
 
-        const socketIds = [...(io.sockets.adapter.rooms.get(socketRoomKey) ?? [])].filter(
-          (sid) => sid !== socket.id,
-        );
-        const remainingPeers: RoomPresencePeer[] = [];
-        for (const sid of socketIds) {
-          const s = io.sockets.sockets.get(sid);
-          if (s?.data?.user) {
-            remainingPeers.push({
-              peerId: sid,
-              userId: s.data.user.id,
-              name: s.data.user.name,
-              email: s.data.user.email,
-            });
+        try {
+          const roomSockets = await io.in(socketRoomKey).fetchSockets();
+          const remainingPeers: RoomPresencePeer[] = [];
+          for (const s of roomSockets) {
+            if (s.id !== socket.id && s.data?.user) {
+              remainingPeers.push({
+                peerId: s.id,
+                userId: s.data.user.id,
+                name: s.data.user.name,
+                email: s.data.user.email,
+              });
+            }
           }
-        }
 
-        socket.to(socketRoomKey).emit("presence:changed", {
-          roomId,
-          peers: remainingPeers,
-        });
+          socket.to(socketRoomKey).emit("presence:changed", {
+            roomId,
+            peers: remainingPeers,
+          });
+        } catch (error) {
+          console.error("[socket] disconnecting presence update error:", error);
+        }
       }
     });
   });

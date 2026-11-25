@@ -7,9 +7,10 @@ import { ZodError } from "zod";
 import { prisma } from "./lib/prisma.js";
 import {
   RATE_LIMIT_EXPOSED_HEADERS,
-  getAuthRateLimiters,
+  configureAuthRateLimiters,
   parseTrustProxySetting,
 } from "./lib/rateLimit.js";
+import { initRedisClusterFromEnv } from "./lib/redisCluster.js";
 import {
   getWorkspaceLivePresence,
   revokeRoomSessions,
@@ -17,6 +18,7 @@ import {
 } from "./lib/revocation.js";
 import { createTurnServiceFromEnv } from "./lib/turn.js";
 import { authRouter } from "./routes/auth.js";
+import { createAvatarRouter } from "./routes/avatars.js";
 import { roomRouter } from "./routes/rooms.js";
 import { createTurnRouter } from "./routes/turn.js";
 import { createWorkspaceRouter } from "./routes/workspaces.js";
@@ -24,7 +26,6 @@ import { attachRoomSocket } from "./sockets/room.socket.js";
 
 const app = express();
 app.set("trust proxy", parseTrustProxySetting(process.env.TRUST_PROXY));
-const authRateLimiters = getAuthRateLimiters();
 const turnService = createTurnServiceFromEnv();
 const httpServer = createServer(app);
 const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -60,57 +61,86 @@ declare module "socket.io" {
 }
 
 const io = new Server(httpServer, {
-  cors: { origin: allowedOrigins },
+  cors: { origin: allowedOrigins, credentials: true },
 });
 
 app.use(
   cors({
     origin: allowedOrigins,
+    credentials: true,
     exposedHeaders: [...RATE_LIMIT_EXPOSED_HEADERS],
   }),
 );
-app.post("/api/auth/login", authRateLimiters.loginIpLimiter);
-app.post("/api/auth/register", authRateLimiters.registerIpLimiter);
-app.post("/api/auth/refresh", authRateLimiters.loginIpLimiter);
-app.use(express.json());
+app.use(express.json({ limit: "512kb" }));
 
-app.get("/api/health", (_request, response) => {
-  response.json({
-    status: "ok",
-    service: "bifrost-signaling-server",
-    realtime: "webrtc-p2p-signaling",
+async function bootstrap() {
+  const redisCluster = await initRedisClusterFromEnv(io);
+  const authRateLimiters = configureAuthRateLimiters({
+    redisClient: redisCluster.rateLimitClient,
   });
-});
 
-app.use("/api/auth", authRouter);
-app.use(
-  "/api/workspaces",
-  createWorkspaceRouter(prisma, {
-    onMemberRemoved: (event) => revokeWorkspaceMemberSessions(io, prisma, event),
-    onRoomDeleted: (event) =>
-      revokeRoomSessions(io, {
-        workspaceId: event.workspaceId,
-        roomId: event.roomId,
-        message: "Phòng này đã bị xóa bởi Workspace Owner.",
-      }),
-    onRoomAccessRevoked: (event) => revokeRoomSessions(io, event),
-    getWorkspacePresence: (workspaceId) => getWorkspaceLivePresence(io, prisma, workspaceId),
-  }),
-);
-app.use("/api/rooms", roomRouter);
-app.use("/api/turn", createTurnRouter(prisma, turnService));
+  app.post("/api/auth/login", authRateLimiters.loginIpLimiter);
+  app.post("/api/auth/register", authRateLimiters.registerIpLimiter);
+  app.post("/api/auth/refresh", authRateLimiters.loginIpLimiter);
 
-app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  if (error instanceof ZodError) {
-    response.status(400).json({ message: error.issues[0]?.message ?? "Dữ liệu không hợp lệ." });
-    return;
-  }
-  console.error(error);
-  response.status(500).json({ message: "Đã xảy ra lỗi máy chủ." });
-});
+  app.get("/api/health", (_request, response) => {
+    response.json({
+      status: "ok",
+      service: "bifrost-signaling-server",
+      realtime: "webrtc-p2p-signaling",
+      clusterMode: redisCluster.enabled ? "redis-adapter" : "single-node",
+    });
+  });
 
-attachRoomSocket(io, prisma);
+  app.use("/api/avatars", createAvatarRouter());
+  app.use("/api/auth", authRouter);
+  app.use(
+    "/api/workspaces",
+    createWorkspaceRouter(prisma, {
+      onMemberRemoved: (event) => revokeWorkspaceMemberSessions(io, prisma, event),
+      onRoomDeleted: (event) =>
+        revokeRoomSessions(io, {
+          workspaceId: event.workspaceId,
+          roomId: event.roomId,
+          message: "Phòng này đã bị xóa bởi Workspace Owner.",
+        }),
+      onRoomAccessRevoked: (event) => revokeRoomSessions(io, event),
+      getWorkspacePresence: (workspaceId) => getWorkspaceLivePresence(io, prisma, workspaceId),
+    }),
+  );
+  app.use("/api/rooms", roomRouter);
+  app.use("/api/turn", createTurnRouter(prisma, turnService));
 
-httpServer.listen(port, () => {
-  console.info(`Bifrost server is running on http://localhost:${port}`);
-});
+  app.use(
+    (
+      error: unknown,
+      _request: express.Request,
+      response: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      if (error instanceof ZodError) {
+        response.status(400).json({ message: error.issues[0]?.message ?? "Dữ liệu không hợp lệ." });
+        return;
+      }
+      console.error(error);
+      response.status(500).json({ message: "Đã xảy ra lỗi máy chủ." });
+    },
+  );
+
+  attachRoomSocket(io, prisma);
+
+  const shutdown = async () => {
+    await Promise.allSettled([redisCluster.close(), authRateLimiters.shutdown()]);
+    httpServer.close(() => process.exit(0));
+  };
+  process.once("SIGTERM", () => void shutdown());
+  process.once("SIGINT", () => void shutdown());
+
+  httpServer.listen(port, () => {
+    console.info(
+      `Bifrost server is running on http://localhost:${port} (${redisCluster.enabled ? "redis-cluster" : "single-node"})`,
+    );
+  });
+}
+
+void bootstrap();
